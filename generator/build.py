@@ -1,4 +1,6 @@
 # generator/build.py
+# ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
+
 import os, re, html, shutil
 from pathlib import Path
 import pandas as pd
@@ -8,8 +10,8 @@ import pandas as pd
 # =========================
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1XrARBpah9CL_BMj3XRsyw1CL5o8RVheDyuAg5ya0z4I/gviz/tq?tqx=out:csv&sheet=NEW%20MERGED%20FILE"
 
-OUT_DIR = Path("docs")          # GitHub Pages can publish /docs
-ASSETS_SRC = Path("assets_src") # put hem.png + rism.png here
+OUT_DIR = Path("docs")            # GitHub Pages: publish /docs
+ASSETS_SRC = Path("assets_src")   # put hem.png + rism.png here
 HEM_LOGO = "hem.png"
 RISM_LOGO = "rism.png"
 
@@ -24,7 +26,7 @@ EM_TITLES = [
 EM_TITLES_SORTED = sorted(EM_TITLES, key=len, reverse=True)
 
 # =========================
-# HELPERS (from your script)
+# HELPERS
 # =========================
 def clean_str(val):
     if pd.isna(val) or val is None:
@@ -33,6 +35,7 @@ def clean_str(val):
     return "" if s.lower() == "nan" else s
 
 def clean_numberish(val):
+    """Turn Excel numeric-like ids into clean strings (avoid 123.0)."""
     if pd.isna(val) or val is None:
         return ""
     if isinstance(val, float) and val.is_integer():
@@ -91,18 +94,25 @@ def parse_conc_ids(s):
     return [p.strip() for p in parts if p.strip()]
 
 def format_uniform_instr(raw_text, alternative=False):
+    """
+    Any 'LABEL: { ... }' becomes its own line block (braces removed).
+    Works for ChI but also any other label pattern followed by ': {'
+    """
     s = clean_str(raw_text)
     if not s:
         return ""
+
     def repl(m):
         label = m.group(1).strip()
         content = m.group(2).strip()
         return f"\n{label} {content}\n"
-    t2 = re.sub(r'([^:]+:\s*)\{([^}]*)\}', repl, s)
+
+    t2 = re.sub(r'([^:]+:\s*)\{([^}]*)\}', repl, s)   # remove braces, insert breaks
     t2 = re.sub(r'\n\s*,\s*', '\n', t2)
     t2 = re.sub(r'\n+', '\n', t2).strip(' \n,')
     if not t2.strip():
         return ""
+
     heading = "UNIFORM INSTRUMENTATION (ALTERNATIVE)" if alternative else "UNIFORM INSTRUMENTATION"
     body = html.escape(t2, quote=False).replace("\n", "<br>")
     return f'<strong class="instr-label">{heading}</strong><div class="instr-content">{body}</div>'
@@ -130,13 +140,25 @@ def get_col(row, name):
     return row[name] if (name in row and not pd.isna(row[name])) else ""
 
 def norm_music_type(s):
+    """
+    Keep ONLY canonical ZinkNET values:
+      - Instrumental
+      - Vocal / Mixed
+      - Instrumental / Vocal / Mixed
+    """
     t = clean_str(s)
     if not t:
         return ""
     t = re.sub(r"\s+", " ", t.strip())
-    CANON = {"Instrumental", "Vocal / Mixed", "Instrumental / Vocal / Mixed"}
+
+    CANON = {
+        "Instrumental",
+        "Vocal / Mixed",
+        "Instrumental / Vocal / Mixed",
+    }
     if t in CANON:
         return t
+
     low = t.lower().replace(" / ", "/").replace(" /", "/").replace("/ ", "/")
     if ("instrumental" in low) and ("vocal" in low) and ("mixed" in low):
         return "Instrumental / Vocal / Mixed"
@@ -144,11 +166,15 @@ def norm_music_type(s):
         return "Vocal / Mixed"
     if ("instrumental" in low) and ("mixed" in low) and ("vocal" not in low):
         return "Instrumental"
+
     return t
 
 def norm_url(u):
     return clean_str(u).strip()
 
+# =========================
+# RISM CHIPS
+# =========================
 def rism_chip_unique(link, text, used_links=None):
     link = norm_url(link)
     if not link:
@@ -172,13 +198,27 @@ def rism_chip_collection(parent_rec, used_links=None):
     return rism_chip_unique(link, "RISM Online (Collection)", used_links)
 
 def rism_duo(self_chip_html, coll_chip_html):
+    """Elegant double-chip wrapper with a thin divider."""
     if self_chip_html and coll_chip_html:
         return f'<span class="rism-duo">{self_chip_html}<span class="rism-divider"></span>{coll_chip_html}</span>'
     return self_chip_html or coll_chip_html or ""
 
+# =========================
+# HEADER (logos fixed names)
+# =========================
 def build_header_html():
-    hem_img = f'<img class="hem-logo" src="assets/{HEM_LOGO}" alt="HEM – Haute école de musique de Genève">' if (OUT_DIR/"assets"/HEM_LOGO).exists() else '<span class="logo-fallback">HEM</span>'
-    rism_img = f'<img class="rism-logo" src="assets/{RISM_LOGO}" alt="RISM">' if (OUT_DIR/"assets"/RISM_LOGO).exists() else '<span class="logo-fallback logo-fallback--small">RISM</span>'
+    def logo_img(filename, alt, cls):
+        fp = OUT_DIR / "assets" / filename
+        if not fp.exists():
+            return ""
+        return f'<img class="{cls}" src="assets/{html.escape(filename, quote=True)}" alt="{alt}">'
+
+    hem_img = logo_img(HEM_LOGO, "HEM – Haute école de musique de Genève", "hem-logo")
+    rism_img = logo_img(RISM_LOGO, "RISM", "rism-logo")
+
+    hem_block = hem_img if hem_img else '<span class="logo-fallback">HEM</span>'
+    rism_block = rism_img if rism_img else '<span class="logo-fallback logo-fallback--small">RISM</span>'
+
     return f"""
 <header class="app-header">
   <div class="header-grid">
@@ -189,19 +229,22 @@ def build_header_html():
         <strong>Project director:</strong> Lambert Colson · <strong>Research assistants:</strong> Tim Meulenbeld, Sushaant Jaccard
       </div>
     </div>
+
     <div class="right">
-      {hem_img}
+      {hem_block}
       <div class="collab-line">
         <span>In collaboration with</span>
-        {rism_img}
+        {rism_block}
       </div>
     </div>
   </div>
 </header>
 """
 
-# --- CSS: keep exactly as in your generator (shortened here? no: keep full) ---
-style_css = r"""<
+# =========================
+# CSS (UNCHANGED FROM YOUR COLAB)
+# =========================
+style_css = r"""
 :root {
   --bg: #f4f5fb;
   --bg-soft: #ffffff;
@@ -528,8 +571,11 @@ dd.meta-value { margin:0; }
 .sub-entry-body { border-top:1px solid #dde1f0; margin-top:6px; padding-top:6px; font-size:0.85rem; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
->"""
+"""
 
+# =========================
+# BUILDERS
+# =========================
 def build_instr_block_for_record(rec, include_catalogs):
     uniform_bits = []
     if rec["instr_rism_main_raw"]:
@@ -552,19 +598,162 @@ def build_instr_block_for_record(rec, include_catalogs):
         )
     return f'<div class="instr-block">{"".join(parts)}</div>' if parts else ""
 
+# =========================
+# TEMPLATES (UNCHANGED FROM YOUR COLAB)
+# =========================
+index_template = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ZinkNET — Interactive catalogue</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+@@HEADER@@
+<main class="shell">
+  <div class="layout">
+    <section class="card">
+      <h2>Search & filters</h2>
+      <div class="filters">
+        <div class="filters-row">
+          <div>
+            <label for="searchInput">Global search</label>
+            <input id="searchInput" type="text" placeholder="Composer, title, number, library…" />
+          </div>
+          <div>
+            <label for="instrInput">Search in instrumentations</label>
+            <input id="instrInput" type="text" placeholder="e.g. cnto, cornettino, trb…" />
+          </div>
+          <div>
+            <label>Music type & source</label>
+            <div class="filter-inline">
+              <select id="musicFilter"><option value="">All music types</option></select>
+              <select id="sourceFilter"><option value="">All sources</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Catalogue</h2>
+      <div id="entries" class="entries">
+@@ENTRIES@@
+      </div>
+      <div id="noResults" class="no-results" style="display:none;">
+        No results for these filters.
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+  const searchInput = document.getElementById('searchInput');
+  const instrInput = document.getElementById('instrInput');
+  const musicFilter = document.getElementById('musicFilter');
+  const sourceFilter = document.getElementById('sourceFilter');
+  const entriesContainer = document.getElementById('entries');
+  const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
+  const noResults = document.getElementById('noResults');
+  function normalize(s){ return (s || '').toLowerCase(); }
+
+  const musicSet = new Set();
+  const sourceSet = new Set();
+  cards.forEach(card => {
+    (card.dataset.musicTypes || '').split('||').filter(Boolean).forEach(v => musicSet.add(v));
+    (card.dataset.sourceTypes || '').split('||').filter(Boolean).forEach(v => sourceSet.add(v));
+  });
+  Array.from(musicSet).sort().forEach(v => {
+    const o=document.createElement('option'); o.value=v; o.textContent=v; musicFilter.appendChild(o);
+  });
+  Array.from(sourceSet).sort().forEach(v => {
+    const o=document.createElement('option'); o.value=v; o.textContent=v; sourceFilter.appendChild(o);
+  });
+
+  function applyFilters() {
+    const q  = normalize(searchInput.value);
+    const qi = normalize(instrInput.value);
+    const mt = musicFilter.value;
+    const st = sourceFilter.value;
+    let visible = 0;
+
+    cards.forEach(card => {
+      const text  = normalize(card.dataset.search);
+      const instr = normalize(card.dataset.instr);
+      const mts = (card.dataset.musicTypes || '').split('||').filter(Boolean);
+      const sts = (card.dataset.sourceTypes || '').split('||').filter(Boolean);
+
+      let ok = true;
+      if (q  && !text.includes(q)) ok = false;
+      if (qi && !instr.includes(qi)) ok = false;
+      if (mt && !mts.includes(mt)) ok = false;
+      if (st && !sts.includes(st)) ok = false;
+
+      card.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    });
+
+    noResults.style.display = visible ? 'none' : '';
+  }
+
+  searchInput.addEventListener('input', applyFilters);
+  instrInput.addEventListener('input', applyFilters);
+  musicFilter.addEventListener('change', applyFilters);
+  sourceFilter.addEventListener('change', applyFilters);
+</script>
+</body>
+</html>
+"""
+
+detail_template = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>@@TITLE_FULL@@</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+@@HEADER@@
+<main class="detail-shell">
+  <div class="breadcrumbs"><a href="index.html">ZinkNET index</a>@@BREADCRUMB@@</div>
+  @@PARENT_BTN@@
+  <article class="detail-card">
+    <div class="detail-header">
+      <div>
+        <p class="detail-title">@@ID@@ — @@TITLE@@</p>
+        <p class="detail-composer">@@COMPOSER@@</p>
+      </div>
+      <div class="detail-tags">@@TAGS@@</div>
+    </div>
+
+    @@INSTR@@
+    <div class="piece-meta">@@META@@</div>
+    @@BIBLIO@@
+    @@NOTE@@
+    @@ORG@@
+    @@CONC@@
+    @@SUBPIECES@@
+  </article>
+</main>
+</body>
+</html>
+"""
+
 def main():
-    # clean output
+    # Clean output dir
     if OUT_DIR.exists():
         shutil.rmtree(OUT_DIR)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # .nojekyll to keep GitHub Pages fully static
+    # Force fully static on GitHub Pages
     (OUT_DIR / ".nojekyll").write_text("", encoding="utf-8")
 
-    # write CSS
+    # Write CSS
     (OUT_DIR / "style.css").write_text(style_css, encoding="utf-8")
 
-    # copy assets
+    # Copy assets
     assets_dir = OUT_DIR / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
     if (ASSETS_SRC / HEM_LOGO).exists():
@@ -572,8 +761,11 @@ def main():
     if (ASSETS_SRC / RISM_LOGO).exists():
         shutil.copy(ASSETS_SRC / RISM_LOGO, assets_dir / RISM_LOGO)
 
-    # read sheet CSV
+    # Read Google Sheet CSV
     df = pd.read_csv(SHEET_CSV_URL, dtype={"RISM No.": "string"})
+    # Normalize column names just in case of CRLF
+    df.columns = [str(c).replace("\r\n", "\n").strip() for c in df.columns]
+
     df["__sort_key"] = df["ZINKNET NO."].apply(parse_zinknet)
     df["__group"] = df["ZINKNET NO."].apply(group_id)
     df_sorted = df.sort_values("__sort_key").reset_index(drop=True)
@@ -585,8 +777,10 @@ def main():
             continue
         gid = row["__group"]
         groups.setdefault(gid, []).append(zid)
+
     for gid, ids in groups.items():
         ids.sort(key=parse_zinknet)
+
     group_sizes = {gid: len(ids) for gid, ids in groups.items()}
 
     records = {}
@@ -594,6 +788,7 @@ def main():
         zid = clean_str(get_col(row, "ZINKNET NO."))
         if not zid:
             continue
+
         gid = row["__group"]
         gcount = group_sizes.get(gid, 1)
 
@@ -640,10 +835,11 @@ def main():
 
         records[zid] = rec
 
+    # concordances ids
     for rec in records.values():
         rec["concordances_ids"] = [cid for cid in parse_conc_ids(rec["concordances_raw"]) if cid in records]
 
-    # virtual collections (same logic as yours)
+    # virtual collections
     virtual_headers = set()
     for gid, ids in groups.items():
         has_real_coll = any(records[z]["indiv_coll"] == "Coll." for z in ids if z in records)
@@ -669,17 +865,327 @@ def main():
             }
 
     # =========================
-    # BUILD INDEX + DETAIL PAGES
-    # (keep your templates, unchanged)
+    # INDEX BUILD
     # =========================
-    # NOTE: to keep this message manageable, you should paste your existing
-    # index_template + detail_template blocks here, exactly as-is, and write
-    # them into OUT_DIR the same way you already do.
+    group_html_parts = []
+    sorted_group_ids = sorted(groups.keys(), key=lambda g: parse_zinknet(g))
 
-    raise SystemExit(
-        "build.py skeleton ready: now paste (1) your full style_css and "
-        "(2) the index/detail page generation blocks into this file."
+    for gid in sorted_group_ids:
+        ids = groups[gid]
+        coll_id = next((z for z in ids if records.get(z, {}).get("indiv_coll") == "Coll."), None)
+        is_virtual_collection = gid in virtual_headers
+
+        header_id = coll_id if coll_id else (gid if is_virtual_collection else ids[0])
+        hrec = records[header_id]
+        gcount_total = len(ids)
+
+        # tags (dedupe only inside this tag-row)
+        used_links_tags = set()
+        tags_html = []
+        if hrec["music_type_raw"]:
+            tags_html.append(f'<span class="tag tag-type">{escape_textnode(hrec["music_type_raw"])}</span>')
+        if hrec["source_type_raw"]:
+            tags_html.append(f'<span class="tag tag-source">{escape_textnode(hrec["source_type_raw"])}</span>')
+
+        if coll_id or is_virtual_collection:
+            nb_pieces = gcount_total - 1 if coll_id else gcount_total
+            nb_pieces = max(nb_pieces, 0)
+            tags_html.append(f'<span class="tag tag-count">{nb_pieces} piece{"s" if nb_pieces != 1 else ""}</span>')
+
+        if hrec["concordances_ids"]:
+            n = len(hrec["concordances_ids"])
+            tags_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
+
+        if not is_virtual_collection:
+            chip = rism_chip_self(hrec, used_links_tags)
+            if chip:
+                tags_html.append(chip)
+
+        display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
+
+        # Collections: no catalog instrumentation in main view
+        instr_block = build_instr_block_for_record(hrec, include_catalogs=not (coll_id or is_virtual_collection))
+
+        meta_rows = []
+        if (not is_virtual_collection) and hrec["composer"]:
+            meta_rows.append(f'<dt class="meta-label">Composer</dt><dd class="meta-value">{hrec["composer"]}</dd>')
+
+        lib_val = hrec["library"]
+        shelf_val = hrec["shelfmark"]
+        if hrec["see_rism"]:
+            if lib_val: lib_val += " "
+            lib_val += '<span class="see-rism-tag">See RISM</span>'
+            if shelf_val: shelf_val += " "
+            shelf_val += '<span class="see-rism-tag">See RISM</span>'
+
+        if lib_val:
+            meta_rows.append(f'<dt class="meta-label">Library</dt><dd class="meta-value">{lib_val}</dd>')
+        if shelf_val:
+            meta_rows.append(f'<dt class="meta-label">Shelfmark</dt><dd class="meta-value">{shelf_val}</dd>')
+
+        meta_html = ('<dl class="meta">' + "\n".join(meta_rows) + "</dl>") if meta_rows else ""
+
+        # contents
+        sub_block = ""
+        if coll_id or is_virtual_collection:
+            sub_lines = []
+            for pid in ids:
+                if coll_id and pid == coll_id:
+                    continue
+                r = records[pid]
+
+                conc_tag = ""
+                if r["concordances_ids"]:
+                    n = len(r["concordances_ids"])
+                    conc_tag = f'<div class="subpiece-conc-tag"><span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span></div>'
+
+                instr_short = r["instr_rism_main_raw"] or r["instr_catalogs_raw"]
+                instr_short_disp = escape_textnode(instr_short) if instr_short else ""
+
+                # RISM chip per line (dedupe inside the line only)
+                used_links_line = set()
+                sub_rism = rism_chip_self(r, used_links_line)
+
+                sub_lines.append(f"""
+      <div class="subpiece-line">
+        <div><span class="subpiece-id">{escape_textnode(pid)} — {r['title'] or '(Untitled)'}</span></div>
+        <div class="subpiece-meta">{r['composer'] or ''}</div>
+        <div class="subpiece-meta">{instr_short_disp}</div>
+        <div class="subpiece-meta subpiece-link">
+          <a href="piece-{pid.replace('/','-')}.html" target="_blank" rel="noopener">Open piece page</a>
+          {sub_rism}
+        </div>
+        {conc_tag}
+      </div>""")
+            if sub_lines:
+                sub_block = f"""
+      <div class="subpieces">
+        <div class="subpieces-title">Contents</div>
+        {''.join(sub_lines)}
+      </div>"""
+
+        title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
+        title_part = f" — {title_html}" if title_html else ""
+
+        # dataset attributes for filtering
+        search_blob_parts = []
+        for z in ids:
+            rr = records[z]
+            search_blob_parts.extend([
+                z, rr["composer_raw"], rr["title_raw"],
+                rr["instr_rism_main_raw"], rr["instr_rism_alt_raw"], rr["instr_catalogs_raw"],
+                rr["library_raw"], rr["shelfmark_raw"],
+                rr["music_type_raw"], rr["source_type_raw"],
+                rr["note_raw"], rr["organology_raw"],
+            ])
+        search_blob = " ".join([p for p in search_blob_parts if p]).replace("\n", " ")
+        music_types_set = sorted({records[z]["music_type_raw"] for z in ids if records[z]["music_type_raw"]})
+        source_types_set = sorted({records[z]["source_type_raw"] for z in ids if records[z]["source_type_raw"]})
+        instr_blob = " ".join(
+            ((records[z]["instr_rism_main_raw"] + " " + records[z]["instr_rism_alt_raw"] + " " + records[z]["instr_catalogs_raw"]).strip())
+            for z in ids
+        ).replace("\n", " ")
+
+        open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
+
+        group_html_parts.append(f"""
+    <details class="entry"
+      data-search="{escape_attr(search_blob)}"
+      data-music-types="{escape_attr('||'.join(music_types_set))}"
+      data-source-types="{escape_attr('||'.join(source_types_set))}"
+      data-instr="{escape_attr(instr_blob)}">
+      <summary>
+        <div class="entry-main">
+          <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
+          <div class="entry-composer">{hrec['composer'] or ''}</div>
+          <div class="entry-tags">{''.join(tags_html)}</div>
+        </div>
+        <div class="entry-arrow">›</div>
+      </summary>
+      <div class="entry-body">
+        {instr_block}
+        {meta_html}
+        {sub_block}
+        {open_link_html}
+      </div>
+    </details>
+    """)
+
+    entries_html = "\n".join(group_html_parts)
+
+    (OUT_DIR / "index.html").write_text(
+        index_template.replace("@@HEADER@@", build_header_html()).replace("@@ENTRIES@@", entries_html),
+        encoding="utf-8"
     )
+
+    # =========================
+    # DETAIL PAGES
+    # =========================
+    for zid, rec in records.items():
+        used_links_page = set()  # no duplicate RISM link anywhere on the page
+
+        gid = rec["group"]
+        ids_in_group = groups.get(gid, [zid])
+        coll_id = next((x for x in ids_in_group if records.get(x, {}).get("indiv_coll") == "Coll."), None)
+        is_virtual_group = gid in virtual_headers
+
+        parent_id = coll_id if coll_id else (gid if is_virtual_group else "")
+        parent_rec = records.get(parent_id) if parent_id else None
+
+        breadcrumb_extra = ""
+        parent_btn = ""
+        if parent_id and zid != parent_id:
+            breadcrumb_extra = f' &nbsp;›&nbsp; <a href="piece-{parent_id.replace("/","-")}.html" target="_blank" rel="noopener">Collection {escape_textnode(parent_id)}</a>'
+            parent_btn = f'<div style="margin:8px 0 12px;"><a class="tag tag-count" href="piece-{parent_id.replace("/","-")}.html" target="_blank" rel="noopener">Open collection</a></div>'
+
+        # Tags: type/source + concordances + (RISM self + collection in a duo wrapper)
+        tags = []
+        if rec["music_type_raw"]:
+            tags.append(f'<span class="tag tag-type">{escape_textnode(rec["music_type_raw"])}</span>')
+        if rec["source_type_raw"]:
+            tags.append(f'<span class="tag tag-source">{escape_textnode(rec["source_type_raw"])}</span>')
+        if rec["concordances_ids"]:
+            n = len(rec["concordances_ids"])
+            tags.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
+
+        self_link = norm_url(rec.get("rism_link_raw",""))
+        coll_link = norm_url(parent_rec.get("rism_link_raw","")) if parent_rec else ""
+
+        self_chip = rism_chip_self(rec, used_links_page)
+        coll_chip = ""
+        if parent_rec and coll_link and (coll_link != self_link) and (zid != parent_id):
+            coll_chip = rism_chip_collection(parent_rec, used_links_page)
+
+        duo = rism_duo(self_chip, coll_chip)
+        if duo:
+            tags.append(duo)
+
+        tags_html = "".join(tags)
+
+        instr_block = "" if rec["indiv_coll"] == "VirtualColl" else build_instr_block_for_record(rec, include_catalogs=True)
+
+        meta_bits = []
+        if rec["indiv_coll"] != "VirtualColl" and rec["composer"]:
+            meta_bits.append(f'<div class="meta-block"><span class="label">Composer</span><span class="value">{rec["composer"]}</span></div>')
+
+        lib_val = rec["library"]
+        shelf_val = rec["shelfmark"]
+        if rec["see_rism"]:
+            if lib_val: lib_val += " "
+            lib_val += '<span class="see-rism-tag">See RISM</span>'
+            if shelf_val: shelf_val += " "
+            shelf_val += '<span class="see-rism-tag">See RISM</span>'
+
+        if lib_val:
+            meta_bits.append(f'<div class="meta-block"><span class="label">Library</span><span class="value">{lib_val}</span></div>')
+        if shelf_val:
+            meta_bits.append(f'<div class="meta-block"><span class="label">Shelfmark</span><span class="value">{shelf_val}</span></div>')
+
+        meta_html = "".join(meta_bits)
+
+        biblio_html = f'<div class="piece-notes"><div class="label">Bibliography:</div><div class="value">{rec["bibliography"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["bibliography"]) else ""
+        note_html = f'<div class="piece-notes"><div class="label">Note:</div><div class="value">{rec["note"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["note"]) else ""
+        org_html = f'<div class="piece-notes"><div class="label">Organology:</div><div class="value">{rec["organology"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["organology"]) else ""
+
+        conc_html = ""
+        if rec["indiv_coll"] != "VirtualColl" and rec["concordances_ids"]:
+            cards = []
+            for cid in rec["concordances_ids"]:
+                cr = records.get(cid)
+                if not cr:
+                    continue
+                mt = cr["music_type_raw"]
+                st = cr["source_type_raw"]
+                mt_tag = f'<span class="tag tag-type">{escape_textnode(mt)}</span>' if mt else ""
+                st_tag = f'<span class="tag tag-source">{escape_textnode(st)}</span>' if st else ""
+                rchip = rism_chip_self(cr, used_links_page)
+                cards.append(f"""
+      <div class="conc-card">
+        <a class="conc-id-link" href="piece-{cid.replace('/','-')}.html" target="_blank" rel="noopener">{escape_textnode(cid)}</a>
+        <div class="conc-main">
+          <div class="conc-title">{cr["title"] or "(Untitled)"}</div>
+          <div class="conc-composer">{cr["composer"] or ""}</div>
+          <div class="conc-tags">{mt_tag}{st_tag}{rchip}</div>
+        </div>
+      </div>""")
+            conc_html = f"""
+    <div class="conc-block">
+      <div class="conc-heading">Linked concordances</div>
+      <div class="conc-cards">
+        {''.join(cards)}
+      </div>
+    </div>"""
+
+        subpieces_html = ""
+        if rec["indiv_coll"] in ("Coll.", "VirtualColl"):
+            sub_entries = []
+            for pid in ids_in_group:
+                if coll_id and pid == coll_id:
+                    continue
+                pr = records.get(pid)
+                if not pr:
+                    continue
+
+                sub_instr = "" if pr["indiv_coll"] == "VirtualColl" else build_instr_block_for_record(pr, include_catalogs=True)
+
+                sub_conc = ""
+                if pr["concordances_ids"]:
+                    n = len(pr["concordances_ids"])
+                    sub_conc = f'<div class="sub-entry-conc"><span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span></div>'
+
+                sub_rism = rism_chip_self(pr, used_links_page)
+
+                sub_entries.append(f"""
+    <details class="sub-entry">
+      <summary>
+        <div class="sub-entry-header">
+          <div class="sub-entry-title">{escape_textnode(pid)} — {pr["title"] or "(Untitled)"}</div>
+          <div class="sub-entry-composer">{pr["composer"] or ""}</div>
+        </div>
+      </summary>
+      <div class="sub-entry-body">
+        {sub_instr}
+        <div class="subpiece-link" style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <a href="piece-{pid.replace('/','-')}.html" target="_blank" rel="noopener">Open piece page</a>
+          {sub_rism}
+        </div>
+        {sub_conc}
+      </div>
+    </details>
+            """)
+
+            subpieces_html = f"""
+    <div class="detail-subpieces">
+      <div class="subpieces-title">Contents</div>
+      {''.join(sub_entries)}
+    </div>"""
+
+        title_full = f"{zid} — {rec['title_raw'] or '(Untitled)'}"
+        page_html = (
+            detail_template
+            .replace("@@TITLE_FULL@@", html.escape(title_full, quote=False))
+            .replace("@@HEADER@@", build_header_html())
+            .replace("@@BREADCRUMB@@", breadcrumb_extra)
+            .replace("@@PARENT_BTN@@", parent_btn)
+            .replace("@@ID@@", escape_textnode(zid))
+            .replace("@@TITLE@@", rec["title"] or "<em>(Untitled)</em>")
+            .replace("@@COMPOSER@@", rec["composer"] or "")
+            .replace("@@TAGS@@", tags_html)
+            .replace("@@INSTR@@", instr_block)
+            .replace("@@META@@", meta_html)
+            .replace("@@BIBLIO@@", biblio_html)
+            .replace("@@NOTE@@", note_html)
+            .replace("@@ORG@@", org_html)
+            .replace("@@CONC@@", conc_html)
+            .replace("@@SUBPIECES@@", subpieces_html)
+        )
+        (OUT_DIR / f"piece-{zid.replace('/','-')}.html").write_text(page_html, encoding="utf-8")
+
+    # Small build summary (useful in Actions logs)
+    print("✅ Built docs/")
+    print("Index:", (OUT_DIR / "index.html").exists())
+    print("CSS:", (OUT_DIR / "style.css").exists())
+    print("Pieces:", len(list(OUT_DIR.glob("piece-*.html"))))
 
 if __name__ == "__main__":
     main()
