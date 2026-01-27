@@ -1,5 +1,4 @@
 
-
 :root {
   --bg: #f4f5fb;
   --bg-soft: #ffffff;
@@ -77,7 +76,7 @@ h1{
   width:auto;
   filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
 }
-.hem-logo{ height: 58px; }  /* HEM larger only */
+.hem-logo{ height: 58px; }
 .rism-logo{ height: 30px; }
 
 .collab-line{
@@ -187,7 +186,6 @@ summary::-webkit-details-marker { display:none; }
 .tag-count { background: var(--green-collection-bg); border-color: var(--green-collection); color: var(--green-collection); font-weight:650; }
 .tag-conc { border:1px solid var(--border-subtle); background:#ffffff; }
 
-/* RISM mini-chip */
 .tag-rism{
   border-color: var(--violet-border);
   background: var(--violet-bg);
@@ -196,8 +194,6 @@ summary::-webkit-details-marker { display:none; }
   letter-spacing:.12em;
   font-weight:650;
 }
-
-/* Elegant duo wrapper */
 .rism-duo{
   display:inline-flex;
   align-items:center;
@@ -211,8 +207,6 @@ summary::-webkit-details-marker { display:none; }
   background: rgba(76,29,149,0.35);
   border-radius:1px;
 }
-
-/* See RISM (violet, harmonized) */
 .see-rism-tag {
   display:inline-flex; align-items:center; margin-left:6px;
   padding:2px 6px; border-radius:999px;
@@ -326,4 +320,3 @@ dd.meta-value { margin:0; }
 .sub-entry-body { border-top:1px solid #dde1f0; margin-top:6px; padding-top:6px; font-size:0.85rem; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
-
