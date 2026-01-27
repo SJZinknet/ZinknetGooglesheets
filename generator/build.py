@@ -427,7 +427,6 @@ def build_header_html():
 # =========================
 style_css = r"""
 
-
 :root {
   --bg: #f4f5fb;
   --bg-soft: #ffffff;
@@ -754,7 +753,6 @@ dd.meta-value { margin:0; }
 .sub-entry-body { border-top:1px solid #dde1f0; margin-top:6px; padding-top:6px; font-size:0.85rem; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
-
 
 """  # <= IMPORTANT : colle ici EXACTEMENT ton style_css actuel (celui qui fonctionne déjà)
 # NOTE: je ne te le recolle pas ici pour éviter un risque de double-copie/édition
