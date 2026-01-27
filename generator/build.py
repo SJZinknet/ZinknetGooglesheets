@@ -1,6 +1,14 @@
 # generator/build.py
 # ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
-# Adds: "Search Tool" instrumentation search builder (include/exclude + qty) with dropdown indexed from the sheet
+# Features:
+#  - Static site generator: index + detail pages
+#  - Reads Google Sheet CSV
+#  - "Search Tool" instrumentation parsing into scenarios
+#  - Instrumentation Search Builder UI:
+#       include/exclude + (>= or =) + qty + dropdown indexed from sheet
+#  - Collection intelligent mode:
+#       when Search Tool rules are active, collections show X/Y matching pieces
+#       and hide non-matching subpieces in the "Contents" list
 
 import os, re, html, shutil, json
 from pathlib import Path
@@ -36,7 +44,7 @@ def clean_str(val):
     return "" if s.lower() == "nan" else s
 
 def clean_numberish(val):
-    """Turn Excel numeric-like ids into clean strings (avoid 123.0)."""
+    """Turn numeric-like ids into clean strings (avoid 123.0)."""
     if pd.isna(val) or val is None:
         return ""
     if isinstance(val, float) and val.is_integer():
@@ -108,7 +116,7 @@ def format_uniform_instr(raw_text, alternative=False):
         content = m.group(2).strip()
         return f"\n{label} {content}\n"
 
-    t2 = re.sub(r'([^:]+:\s*)\{([^}]*)\}', repl, s)   # remove braces, insert breaks
+    t2 = re.sub(r'([^:]+:\s*)\{([^}]*)\}', repl, s)
     t2 = re.sub(r'\n\s*,\s*', '\n', t2)
     t2 = re.sub(r'\n+', '\n', t2).strip(' \n,')
     if not t2.strip():
@@ -174,15 +182,12 @@ def norm_url(u):
     return clean_str(u).strip()
 
 # =========================
-# Search Tool parser (NEW)
+# Search Tool parser
 # =========================
-
 def _split_top_level(s, sep):
     """Split by sep only when not inside brackets []"""
     out, buf, depth = [], [], 0
-    i = 0
-    while i < len(s):
-        ch = s[i]
+    for ch in s:
         if ch == '[':
             depth += 1
         elif ch == ']':
@@ -194,7 +199,6 @@ def _split_top_level(s, sep):
             buf = []
         else:
             buf.append(ch)
-        i += 1
     tail = "".join(buf).strip()
     if tail:
         out.append(tail)
@@ -260,7 +264,7 @@ def _parse_branch(branch_block):
 def _expand_choices(base_items, choices, limit=256):
     """
     Enumerate scenarios by choosing one alt from each choice group.
-    limit avoids explosion; if exceeded we stop.
+    limit avoids explosion.
     Returns list of dict instrument->qty
     """
     scenarios = [dict(base_items)]
@@ -286,6 +290,7 @@ def parse_search_tool_to_scenarios(text, limit=256):
       - comma-separated top-level items
       - may contain ONE top-level branch expression: [branchA] / [branchB] / ...
       - branch content uses '+' for co-presence and [a/b (n)] choices
+
     Returns list of scenarios: list[dict instr->qty]
     """
     s = clean_str(text)
@@ -298,6 +303,7 @@ def parse_search_tool_to_scenarios(text, limit=256):
     common_items = {}
     branch_blocks = None  # list of branch strings
 
+    # First pass: detect branches and collect plain tokens
     for seg in top:
         seg = seg.strip()
         if not seg:
@@ -310,7 +316,6 @@ def parse_search_tool_to_scenarios(text, limit=256):
                 branch_blocks = [p.strip() for p in parts]
                 continue
 
-        # Otherwise: item token
         it = _parse_item_token(seg)
         if it:
             name, qty = it
@@ -325,9 +330,8 @@ def parse_search_tool_to_scenarios(text, limit=256):
                 base2[k] = base2.get(k, 0) + v
             scenarios.extend(_expand_choices(base2, choices, limit=limit))
     else:
-        # No top-level branches.
-        # IMPORTANT: common_items already contains all plain "name (n)" tokens from the first pass.
-        # Here we only collect top-level choice blocks like "[a/b (n)]" so we don't double-count.
+        # IMPORTANT: common_items already contains all plain "name (n)" tokens.
+        # Here we only collect top-level choice blocks like "[a/b (n)]"
         base = dict(common_items)
         choices = []
         for seg in top:
@@ -376,13 +380,12 @@ def rism_chip_collection(parent_rec, used_links=None):
     return rism_chip_unique(link, "RISM Online (Collection)", used_links)
 
 def rism_duo(self_chip_html, coll_chip_html):
-    """Elegant double-chip wrapper with a thin divider."""
     if self_chip_html and coll_chip_html:
         return f'<span class="rism-duo">{self_chip_html}<span class="rism-divider"></span>{coll_chip_html}</span>'
     return self_chip_html or coll_chip_html or ""
 
 # =========================
-# HEADER (logos fixed names)
+# HEADER
 # =========================
 def build_header_html():
     def logo_img(filename, alt, cls):
@@ -420,10 +423,9 @@ def build_header_html():
 """
 
 # =========================
-# CSS (UNCHANGED)
+# CSS
 # =========================
 style_css = r"""
-
 :root {
   --bg: #f4f5fb;
   --bg-soft: #ffffff;
@@ -501,7 +503,7 @@ h1{
   width:auto;
   filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
 }
-.hem-logo{ height: 58px; }  /* HEM larger only */
+.hem-logo{ height: 58px; }
 .rism-logo{ height: 30px; }
 
 .collab-line{
@@ -611,7 +613,6 @@ summary::-webkit-details-marker { display:none; }
 .tag-count { background: var(--green-collection-bg); border-color: var(--green-collection); color: var(--green-collection); font-weight:650; }
 .tag-conc { border:1px solid var(--border-subtle); background:#ffffff; }
 
-/* RISM mini-chip */
 .tag-rism{
   border-color: var(--violet-border);
   background: var(--violet-bg);
@@ -620,8 +621,6 @@ summary::-webkit-details-marker { display:none; }
   letter-spacing:.12em;
   font-weight:650;
 }
-
-/* Elegant duo wrapper */
 .rism-duo{
   display:inline-flex;
   align-items:center;
@@ -635,8 +634,6 @@ summary::-webkit-details-marker { display:none; }
   background: rgba(76,29,149,0.35);
   border-radius:1px;
 }
-
-/* See RISM (violet, harmonized) */
 .see-rism-tag {
   display:inline-flex; align-items:center; margin-left:6px;
   padding:2px 6px; border-radius:999px;
@@ -750,10 +747,7 @@ dd.meta-value { margin:0; }
 .sub-entry-body { border-top:1px solid #dde1f0; margin-top:6px; padding-top:6px; font-size:0.85rem; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
-
-"""  # <= IMPORTANT : colle ici EXACTEMENT ton style_css actuel (celui qui fonctionne déjà)
-# NOTE: je ne te le recolle pas ici pour éviter un risque de double-copie/édition
-# (ton repo a déjà le bon CSS dans build.py). Laisse le tel quel.
+"""
 
 # =========================
 # BUILDERS
@@ -781,7 +775,7 @@ def build_instr_block_for_record(rec, include_catalogs):
     return f'<div class="instr-block">{"".join(parts)}</div>' if parts else ""
 
 # =========================
-# TEMPLATES (UNCHANGED except: NEW Search Builder UI + JS + @@SEARCH_TOOL_INSTRS@@ token)
+# TEMPLATES
 # =========================
 index_template = """<!doctype html>
 <html lang="en">
@@ -809,7 +803,6 @@ index_template = """<!doctype html>
             <input id="instrInput" type="text" placeholder="e.g. cnto, cornettino, trb…" />
           </div>
 
-          <!-- NEW: Search Tool builder -->
           <div>
             <label>Instrumentation Search Builder</label>
             <div class="filter-inline" style="gap:6px;">
@@ -817,22 +810,29 @@ index_template = """<!doctype html>
                 <option value="include">Include</option>
                 <option value="exclude">Exclude</option>
               </select>
+
               <select id="stInstr">
                 <option value="">Select instrument…</option>
               </select>
-              <select id="stQty">
-                <option value="1">≥ 1</option>
-                <option value="2">≥ 2</option>
-                <option value="3">≥ 3</option>
-                <option value="4">≥ 4</option>
-                <option value="5">≥ 5</option>
-                <option value="6">≥ 6</option>
-                <option value="7">≥ 7</option>
-                <option value="8">≥ 8</option>
-                <option value="9">≥ 9</option>
-                <option value="10">≥ 10</option>
+
+              <select id="stCmp">
+                <option value="atleast">≥</option>
+                <option value="exact">=</option>
               </select>
-              <span id="stQtyDebug" style="font-size:0.7rem;color:#b00020;"></span>
+
+              <select id="stQty">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+              </select>
+
               <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
               <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
             </div>
@@ -872,25 +872,20 @@ index_template = """<!doctype html>
   const noResults = document.getElementById('noResults');
   function normalize(s){ return (s || '').toLowerCase(); }
 
-  // NEW: Search Tool controls
+  // Search Tool controls
   const stMode  = document.getElementById('stMode');
   const stInstr = document.getElementById('stInstr');
+  const stCmp   = document.getElementById('stCmp');   // "atleast" | "exact"
   const stQty   = document.getElementById('stQty');
-  const stQtyDebug = document.getElementById('stQtyDebug');
-
-function updateQtyDebug(){
-  stQtyDebug.textContent = 'value used = ' + stQty.value;
-}
-
-stQty.addEventListener('change', updateQtyDebug);
-updateQtyDebug();
   const stAdd   = document.getElementById('stAdd');
   const stClear = document.getElementById('stClear');
   const stActive = document.getElementById('stActive');
 
   // injected by Python: [{k:"cnto", n:123}, ...]
   const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
-  const stRules = []; // {mode:"include"|"exclude", k:"cnto", n:3}
+
+  // rules: {mode:"include"|"exclude", k:"cnto", cmp:"atleast"|"exact", n:3}
+  const stRules = [];
 
   // Populate dropdown with global abbreviations + frequency
   SEARCH_TOOL_INSTRS.forEach(o => {
@@ -907,7 +902,8 @@ updateQtyDebug();
       chip.className = 'tag tag-conc';
       chip.style.cursor = 'pointer';
       const sign = r.mode === 'include' ? '+' : '–';
-      chip.textContent = `${sign} ${r.k} ≥ ${r.n}  ×`;
+      const op = (r.cmp === 'exact') ? '=' : '≥';
+      chip.textContent = `${sign} ${r.k} ${op} ${r.n}  ×`;
       chip.title = 'Click to remove';
       chip.addEventListener('click', () => {
         stRules.splice(idx, 1);
@@ -920,10 +916,14 @@ updateQtyDebug();
 
   stAdd.addEventListener('click', () => {
     const k = stInstr.value;
-    const n = parseInt(stQty.value || '1', 10);
     const mode = stMode.value;
+    const cmp = stCmp.value;
+    const n = Number(stQty.value);
+
     if(!k) return;
-    stRules.push({mode, k, n});
+    if(!Number.isFinite(n) || n <= 0) return;
+
+    stRules.push({mode, k, cmp, n});
     renderStRules();
     applyFilters();
   });
@@ -934,10 +934,27 @@ updateQtyDebug();
     applyFilters();
   });
 
-  // Parse data-stool once per card (cache)
+  // Add a per-card match tag (hidden by default) for collection intelligent mode
+  cards.forEach(card => {
+    const tagsRow = card.querySelector('.entry-tags');
+    if(tagsRow){
+      const t = document.createElement('span');
+      t.className = 'tag tag-conc st-match-tag';
+      t.style.display = 'none';
+      tagsRow.appendChild(t);
+      card.__stMatchTag = t;
+    }
+  });
+
+  // Parse scenarios (card-level) once per card (cache)
   function parseScenarios(card){
     if(card.__stScenarios) return card.__stScenarios;
     const raw = card.dataset.stool || '';
+    card.__stScenarios = parseScenariosFromBlob(raw);
+    return card.__stScenarios;
+  }
+
+  function parseScenariosFromBlob(raw){
     const scenarios = [];
     if(raw){
       raw.split('||').forEach(scStr => {
@@ -953,29 +970,40 @@ updateQtyDebug();
         scenarios.push(sc);
       });
     }
-    card.__stScenarios = scenarios;
     return scenarios;
   }
 
-  // exists at least 1 scenario satisfying all rules
-  function matchesSearchTool(card){
+  function rulePasses(val, r){
+    const need = Number(r.n);
+    if(!Number.isFinite(need)) return false;
+    if(r.cmp === 'exact') return val === need;
+    return val >= need; // "atleast"
+  }
+
+  function matchesRulesOnScenarios(scs){
     if(!stRules.length) return true;
-    const scs = parseScenarios(card);
     if(!scs.length) return false;
 
     return scs.some(sc => {
       for(const r of stRules){
         const val = sc[r.k] || 0;
         if(r.mode === 'include'){
-          if(val < r.n) return false;
+          if(!rulePasses(val, r)) return false;
         } else {
-          if(val >= r.n) return false;
+          // exclude
+          if(rulePasses(val, r)) return false;
         }
       }
       return true;
     });
   }
 
+  function matchesSearchTool(card){
+    const scs = parseScenarios(card);
+    return matchesRulesOnScenarios(scs);
+  }
+
+  // Populate Music/Source filters
   const musicSet = new Set();
   const sourceSet = new Set();
   cards.forEach(card => {
@@ -1008,8 +1036,39 @@ updateQtyDebug();
       if (mt && !mts.includes(mt)) ok = false;
       if (st && !sts.includes(st)) ok = false;
 
-      // NEW: search tool builder
-      if (ok && !matchesSearchTool(card)) ok = false;
+      // Collection intelligent Search Tool mode
+      if(ok && stRules.length){
+        const subLines = Array.from(card.querySelectorAll('.subpiece-line[data-stool-piece]'));
+        if(subLines.length){
+          let matchCount = 0;
+          subLines.forEach(line => {
+            const scs = parseScenariosFromBlob(line.dataset.stoolPiece || '');
+            const okLine = matchesRulesOnScenarios(scs);
+            line.style.display = okLine ? '' : 'none';
+            if(okLine) matchCount++;
+          });
+
+          if(card.__stMatchTag){
+            card.__stMatchTag.textContent = `${matchCount}/${subLines.length} match`;
+            card.__stMatchTag.style.display = '';
+          }
+
+          if(matchCount === 0) ok = false;
+        } else {
+          // non-collection cards: evaluate card-level scenarios
+          if(!matchesSearchTool(card)) ok = false;
+          if(card.__stMatchTag){
+            card.__stMatchTag.style.display = 'none';
+          }
+        }
+      } else {
+        // No Search Tool rules: reset subpiece visibility + hide match tag
+        const subLines = Array.from(card.querySelectorAll('.subpiece-line[data-stool-piece]'));
+        subLines.forEach(line => line.style.display = '');
+        if(card.__stMatchTag){
+          card.__stMatchTag.style.display = 'none';
+        }
+      }
 
       card.style.display = ok ? '' : 'none';
       if (ok) visible++;
@@ -1131,7 +1190,6 @@ def main():
             "note_raw": clean_str(get_col(row, "Note")),
             "bibliography_raw": clean_str(get_col(row, "Bibliography")),
             "organology_raw": clean_str(get_col(row, "Organology")),
-            # NEW:
             "search_tool_raw": clean_str(get_col(row, "Search Tool")),
         }
 
@@ -1155,16 +1213,16 @@ def main():
         rec["note"] = escape_textnode(rec["note_raw"])
         rec["organology"] = escape_textnode(rec["organology_raw"])
 
-        # NEW: scenarios for Search Tool
+        # Search Tool scenarios (per piece)
         rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
 
         records[zid] = rec
 
-    # concordances ids
+    # Concordances ids
     for rec in records.values():
         rec["concordances_ids"] = [cid for cid in parse_conc_ids(rec["concordances_raw"]) if cid in records]
 
-    # virtual collections
+    # Virtual collections
     virtual_headers = set()
     for gid, ids in groups.items():
         has_real_coll = any(records[z]["indiv_coll"] == "Coll." for z in ids if z in records)
@@ -1187,12 +1245,11 @@ def main():
                 "library": escape_textnode(lib), "shelfmark": escape_textnode(shelf),
                 "category": "", "note": "", "organology": "",
                 "concordances_ids": [],
-                # NEW:
                 "search_tool_raw": "",
                 "search_scenarios": [],
             }
 
-    # NEW: build global instrument index + frequency (pieces where it can appear)
+    # Global instrument index for dropdown + frequency
     all_instr = set()
     instr_freq = {}
     for rec in records.values():
@@ -1204,6 +1261,7 @@ def main():
                 present.add(k)
         for k in present:
             instr_freq[k] = instr_freq.get(k, 0) + 1
+
     all_instr_sorted = sorted(all_instr, key=lambda x: x.lower())
     search_tool_js = json.dumps(
         [{"k": k, "n": int(instr_freq.get(k, 0))} for k in all_instr_sorted],
@@ -1291,8 +1349,18 @@ def main():
                 used_links_line = set()
                 sub_rism = rism_chip_self(r, used_links_line)
 
+                # per-piece Search Tool scenarios blob
+                seen_sc_piece = set()
+                scenario_keys_piece = []
+                for sc in (r.get("search_scenarios") or []):
+                    key = "|".join(f"{k}={v}" for k, v in sorted(sc.items()))
+                    if key and key not in seen_sc_piece:
+                        seen_sc_piece.add(key)
+                        scenario_keys_piece.append(key)
+                stool_blob_piece = "||".join(scenario_keys_piece)
+
                 sub_lines.append(f"""
-      <div class="subpiece-line">
+      <div class="subpiece-line" data-stool-piece="{escape_attr(stool_blob_piece)}">
         <div><span class="subpiece-id">{escape_textnode(pid)} — {r['title'] or '(Untitled)'}</span></div>
         <div class="subpiece-meta">{r['composer'] or ''}</div>
         <div class="subpiece-meta">{instr_short_disp}</div>
@@ -1331,7 +1399,7 @@ def main():
             for z in ids
         ).replace("\n", " ")
 
-        # NEW: Search Tool scenarios blob for this group (union across pieces)
+        # card-level Search Tool scenarios blob: union across pieces (used for non-collection entries)
         scenario_keys = []
         seen_sc = set()
         for z in ids:
@@ -1380,10 +1448,10 @@ def main():
     )
 
     # =========================
-    # DETAIL PAGES (UNCHANGED)
+    # DETAIL PAGES
     # =========================
     for zid, rec in records.items():
-        used_links_page = set()  # no duplicate RISM link anywhere on the page
+        used_links_page = set()
 
         gid = rec["group"]
         ids_in_group = groups.get(gid, [zid])
@@ -1399,7 +1467,6 @@ def main():
             breadcrumb_extra = f' &nbsp;›&nbsp; <a href="piece-{parent_id.replace("/","-")}.html" target="_blank" rel="noopener">Collection {escape_textnode(parent_id)}</a>'
             parent_btn = f'<div style="margin:8px 0 12px;"><a class="tag tag-count" href="piece-{parent_id.replace("/","-")}.html" target="_blank" rel="noopener">Open collection</a></div>'
 
-        # Tags: type/source + concordances + (RISM self + collection in a duo wrapper)
         tags = []
         if rec["music_type_raw"]:
             tags.append(f'<span class="tag tag-type">{escape_textnode(rec["music_type_raw"])}</span>')
@@ -1456,9 +1523,9 @@ def main():
                 if not cr:
                     continue
                 mt = cr["music_type_raw"]
-                st = cr["source_type_raw"]
+                stt = cr["source_type_raw"]
                 mt_tag = f'<span class="tag tag-type">{escape_textnode(mt)}</span>' if mt else ""
-                st_tag = f'<span class="tag tag-source">{escape_textnode(st)}</span>' if st else ""
+                st_tag = f'<span class="tag tag-source">{escape_textnode(stt)}</span>' if stt else ""
                 rchip = rism_chip_self(cr, used_links_page)
                 cards_html.append(f"""
       <div class="conc-card">
