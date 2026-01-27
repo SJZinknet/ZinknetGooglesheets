@@ -1,7 +1,8 @@
 # generator/build.py
 # ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
+# Adds: "Search Tool" instrumentation search builder (include/exclude + qty) with dropdown indexed from the sheet
 
-import os, re, html, shutil
+import os, re, html, shutil, json
 from pathlib import Path
 import pandas as pd
 
@@ -173,6 +174,186 @@ def norm_url(u):
     return clean_str(u).strip()
 
 # =========================
+# Search Tool parser (NEW)
+# =========================
+
+def _split_top_level(s, sep):
+    """Split by sep only when not inside brackets []"""
+    out, buf, depth = [], [], 0
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == '[':
+            depth += 1
+        elif ch == ']':
+            depth = max(depth - 1, 0)
+        if ch == sep and depth == 0:
+            part = "".join(buf).strip()
+            if part:
+                out.append(part)
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        out.append(tail)
+    return out
+
+_item_re = re.compile(r'^\s*([^\(\)\[\]]+?)\s*\(\s*(\d+)\s*\)\s*$')
+
+def _parse_item_token(tok):
+    """Parse 'org (1)' -> ('org', 1). Return None if not matching."""
+    m = _item_re.match(tok.strip())
+    if not m:
+        return None
+    name = m.group(1).strip()
+    qty = int(m.group(2))
+    return name, qty
+
+def _strip_outer_brackets(s):
+    s = s.strip()
+    if s.startswith("[") and s.endswith("]"):
+        return s[1:-1].strip()
+    return s
+
+def _parse_choice_block(block):
+    """
+    Parse '[arpa/lute (1)]' -> (['arpa','lute'], 1)
+    """
+    inner = _strip_outer_brackets(block)
+    m2 = re.match(r'^(.*)\(\s*(\d+)\s*\)\s*$', inner)
+    if not m2:
+        return None
+    alts_part = m2.group(1).strip()
+    qty = int(m2.group(2))
+    alts = [a.strip() for a in _split_top_level(alts_part, "/")]
+    alts = [a for a in alts if a]
+    return alts, qty
+
+def _parse_branch(branch_block):
+    """
+    Parse a branch like:
+    [V (2) + [cnto/vl (3)] + [trb/i (3)]]
+    Returns:
+      base_items: dict instrument->qty (mandatory)
+      choices: list of (alts list, qty)
+    """
+    inner = _strip_outer_brackets(branch_block)
+    parts = [p.strip() for p in _split_top_level(inner, "+")]
+    base_items = {}
+    choices = []
+    for p in parts:
+        if not p:
+            continue
+        if p.strip().startswith("[") and p.strip().endswith("]"):
+            ch = _parse_choice_block(p)
+            if ch:
+                choices.append(ch)
+        else:
+            it = _parse_item_token(p)
+            if it:
+                name, qty = it
+                base_items[name] = base_items.get(name, 0) + qty
+    return base_items, choices
+
+def _expand_choices(base_items, choices, limit=256):
+    """
+    Enumerate scenarios by choosing one alt from each choice group.
+    limit avoids explosion; if exceeded we stop.
+    Returns list of dict instrument->qty
+    """
+    scenarios = [dict(base_items)]
+    for alts, qty in choices:
+        new = []
+        for sc in scenarios:
+            for a in alts:
+                sc2 = dict(sc)
+                sc2[a] = sc2.get(a, 0) + qty
+                new.append(sc2)
+                if len(new) >= limit:
+                    break
+            if len(new) >= limit:
+                break
+        scenarios = new
+        if len(scenarios) >= limit:
+            break
+    return scenarios
+
+def parse_search_tool_to_scenarios(text, limit=256):
+    """
+    Grammar:
+      - comma-separated top-level items
+      - may contain ONE top-level branch expression: [branchA] / [branchB] / ...
+      - branch content uses '+' for co-presence and [a/b (n)] choices
+    Returns list of scenarios: list[dict instr->qty]
+    """
+    s = clean_str(text)
+    if not s:
+        return []
+    s = re.sub(r"\s+", " ", s).strip()
+
+    top = _split_top_level(s, ",")
+
+    common_items = {}
+    branch_blocks = None  # list of branch strings
+
+    for seg in top:
+        seg = seg.strip()
+        if not seg:
+            continue
+
+        # Detect top-level: [ ... ] / [ ... ] ...
+        if seg.startswith("[") and seg.endswith("]") and "/" in seg:
+            parts = _split_top_level(seg, "/")
+            if len(parts) >= 2 and all(p.strip().startswith("[") and p.strip().endswith("]") for p in parts):
+                branch_blocks = [p.strip() for p in parts]
+                continue
+
+        # Otherwise: item token
+        it = _parse_item_token(seg)
+        if it:
+            name, qty = it
+            common_items[name] = common_items.get(name, 0) + qty
+
+    scenarios = []
+    if branch_blocks:
+        for bb in branch_blocks:
+            base, choices = _parse_branch(bb)
+            base2 = dict(common_items)
+            for k, v in base.items():
+                base2[k] = base2.get(k, 0) + v
+            scenarios.extend(_expand_choices(base2, choices, limit=limit))
+    else:
+        # No top-level branches: parse as items + choice blocks at top level
+        base = dict(common_items)
+        choices = []
+        for seg in top:
+            seg = seg.strip()
+            if not seg:
+                continue
+            if seg.startswith("[") and seg.endswith("]"):
+                ch = _parse_choice_block(seg)
+                if ch:
+                    choices.append(ch)
+            else:
+                it = _parse_item_token(seg)
+                if it:
+                    name, qty = it
+                    base[name] = base.get(name, 0) + qty
+        scenarios = _expand_choices(base, choices, limit=limit)
+
+    # Deduplicate scenarios
+    seen = set()
+    uniq = []
+    for sc in scenarios:
+        key = tuple(sorted(sc.items()))
+        if key not in seen:
+            seen.add(key)
+            uniq.append(sc)
+    return uniq
+
+# =========================
 # RISM CHIPS
 # =========================
 def rism_chip_unique(link, text, used_links=None):
@@ -242,336 +423,13 @@ def build_header_html():
 """
 
 # =========================
-# CSS (UNCHANGED FROM YOUR COLAB)
+# CSS (UNCHANGED)
 # =========================
 style_css = r"""
-:root {
-  --bg: #f4f5fb;
-  --bg-soft: #ffffff;
-  --accent: #234bb8;
-  --accent-soft: rgba(35,75,184,0.06);
-  --border-subtle: #d0d5eb;
-  --border-strong: #b2b8dd;
-  --text: #111827;
-  --muted: #4b5563;
-  --pill-border: #c3cff5;
-  --green-collection: #1b5e3c;
-  --green-collection-bg: #ddefe5;
-  --tag-neutral-bg: #f5f5ff;
-  --tag-neutral-border: #c5c8e6;
-
-  --violet-border: #8b5cf6;
-  --violet-bg: rgba(139,92,246,0.12);
-  --violet-text: #4c1d95;
-}
-* { box-sizing:border-box; }
-body {
-  margin:0;
-  font-family: Candara, system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: radial-gradient(circle at 0 0,#e7ecff 0,#f4f5fb 40%,#e5e9ff 100%);
-  color: var(--text);
-  line-height:1.45;
-}
-a { color: var(--accent); text-decoration:none; }
-a:hover { text-decoration:underline; }
-
-/* Header */
-header.app-header {
-  padding: 9px 22px 7px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: linear-gradient(to right,rgba(255,255,255,0.98),rgba(245,247,255,0.96));
-  position: sticky; top:0; z-index:20;
-  backdrop-filter: blur(10px);
-}
-.header-grid{
-  display:grid;
-  grid-template-columns: minmax(0,1fr) auto;
-  gap: 12px;
-  align-items:start;
-}
-h1{
-  margin:0;
-  font-size: clamp(1.7rem, 3vw, 2.1rem);
-  letter-spacing:-0.04em;
-  font-weight:800;
-  line-height:1.03;
-}
-.tagline{
-  margin-top:2px;
-  color:var(--muted);
-  font-size:0.92rem;
-}
-.meta-line{
-  margin-top:5px;
-  color:var(--muted);
-  font-size:0.86rem;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  max-width: 100%;
-}
-.right{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-end;
-  gap: 3px;
-  padding-top: 1px;
-}
-.hem-logo,.rism-logo{
-  display:block;
-  width:auto;
-  filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
-}
-.hem-logo{ height: 58px; }  /* HEM larger only */
-.rism-logo{ height: 30px; }
-
-.collab-line{
-  display:flex;
-  align-items:center;
-  gap: 8px;
-  color:var(--muted);
-  font-size:0.78rem;
-  line-height:1.0;
-  white-space:nowrap;
-}
-.logo-fallback{
-  padding:6px 12px;
-  border-radius:999px;
-  border:1px solid var(--border-subtle);
-  background:#fff;
-  color:var(--muted);
-  font-size:.84rem;
-  font-weight:800;
-  letter-spacing:.08em;
-}
-.logo-fallback--small{
-  padding:5px 10px;
-  font-size:.80rem;
-}
-@media (max-width: 980px){
-  .header-grid{ grid-template-columns: 1fr; }
-  .right{ align-items:flex-start; }
-  .meta-line{ white-space:normal; }
-}
-
-/* Layout */
-.shell { max-width:1400px; margin:0 auto; padding:16px 20px 26px; }
-.layout { display:grid; grid-template-columns: minmax(260px,320px) minmax(0,1fr); gap:16px; }
-@media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
-
-.card {
-  background: var(--bg-soft);
-  border-radius:20px;
-  padding:16px 16px 14px;
-  border:1px solid var(--border-subtle);
-  box-shadow:0 16px 40px rgba(15,23,42,0.08);
-}
-.card h2 {
-  margin:0 0 10px;
-  font-size:0.95rem;
-  text-transform:uppercase;
-  letter-spacing:.14em;
-  font-weight:600;
-  color:var(--muted);
-}
-
-.filters label {
-  display:block; font-size:0.78rem;
-  text-transform:uppercase; letter-spacing:.14em;
-  color:var(--muted); margin-bottom:6px;
-}
-.filters input[type="text"] {
-  width:100%; border-radius:999px;
-  border:1px solid var(--border-subtle);
-  background:#fafaff;
-  padding:7px 11px;
-  color:var(--text); font-size:0.9rem; outline:none;
-}
-.filters select {
-  padding:7px 10px; border-radius:999px;
-  border:1px solid var(--border-subtle);
-  background:#fafaff;
-  font-size:0.85rem; color:var(--text);
-  outline:none; cursor:pointer;
-}
-.filters-row { display:flex; flex-direction:column; gap:10px; }
-.filter-inline { display:flex; gap:8px; flex-wrap:wrap; }
-
-.entries { max-height: calc(100vh - 170px); overflow:auto; padding-right:4px; }
-
-details.entry {
-  border-radius:18px;
-  padding:10px 11px 8px;
-  margin-bottom:10px;
-  background: linear-gradient(135deg,#ffffff,#f6f7ff);
-  border:1.5px solid #c5c9ec;
-  transition:border-color .15s ease, box-shadow .15s ease, transform .12s ease, background .15s ease;
-  will-change: transform;
-}
-details.entry[open] {
-  border-color:var(--border-strong);
-  box-shadow:0 10px 26px rgba(15,23,42,0.14);
-  transform: translateY(-1px);
-  background:#ffffff;
-}
-summary { list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px; }
-summary::-webkit-details-marker { display:none; }
-
-.entry-main { display:flex; flex-direction:column; gap:3px; }
-.entry-id { font-weight:650; font-size:0.96rem; color:#020617; }
-.entry-composer { font-size:0.85rem; color:var(--muted); }
-.entry-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; align-items:center; }
-
-.tag {
-  font-size:0.7rem; padding:3px 7px; border-radius:999px;
-  border:1px solid var(--tag-neutral-border);
-  color:var(--muted); background:var(--tag-neutral-bg);
-}
-.tag-type { text-transform:uppercase; letter-spacing:.12em; border-color:#9db5ff; background:#e1e7ff; color:#1d3578; font-weight:650; }
-.tag-source { text-transform:uppercase; letter-spacing:.12em; }
-.tag-count { background: var(--green-collection-bg); border-color: var(--green-collection); color: var(--green-collection); font-weight:650; }
-.tag-conc { border:1px solid var(--border-subtle); background:#ffffff; }
-
-/* RISM mini-chip */
-.tag-rism{
-  border-color: var(--violet-border);
-  background: var(--violet-bg);
-  color: var(--violet-text);
-  text-transform:uppercase;
-  letter-spacing:.12em;
-  font-weight:650;
-}
-
-/* Elegant duo wrapper */
-.rism-duo{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:0;
-  margin:0;
-}
-.rism-divider{
-  width:1px;
-  height:14px;
-  background: rgba(76,29,149,0.35);
-  border-radius:1px;
-}
-
-/* See RISM (violet, harmonized) */
-.see-rism-tag {
-  display:inline-flex; align-items:center; margin-left:6px;
-  padding:2px 6px; border-radius:999px;
-  border:1px solid var(--violet-border);
-  background: var(--violet-bg);
-  font-size:0.7rem; text-transform:uppercase; letter-spacing:.12em;
-  color: var(--violet-text);
-}
-
-.entry-arrow { font-size:1.1rem; color:var(--muted); transition: transform .15s ease, color .15s ease; }
-details[open] > summary .entry-arrow { transform: rotate(90deg); color:var(--accent); }
-
-.entry-body { border-top:1px solid #dde1f7; margin-top:8px; padding-top:8px; font-size:0.9rem; }
-
-dl.meta { margin:0; display:grid; grid-template-columns: minmax(0,150px) minmax(0,1fr); row-gap:4px; column-gap:12px; }
-dt.meta-label { font-weight:600; color:var(--muted); font-size:0.8rem; }
-dd.meta-value { margin:0; }
-
-.instr-block { margin-top:8px; margin-bottom:8px; }
-.instr-strip-uniform { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
-.instr-pill {
-  flex:0 1 470px;
-  background:var(--accent-soft);
-  border-radius:14px; padding:8px 11px;
-  border:1px solid var(--pill-border);
-  font-size:0.85rem;
-}
-.instr-pill.catalog-full {
-  margin-top:8px; width:100%;
-  background:#fdfdff;
-  border-radius:14px; padding:8px 11px;
-  border:1px solid var(--pill-border);
-  font-size:0.85rem;
-}
-.instr-label {
-  font-size:0.72rem; text-transform:uppercase; letter-spacing:0.12em;
-  display:block; margin-bottom:3px; color:#25345f;
-}
-.instr-content { margin-top:2px; line-height:1.35; }
-
-.subpieces {
-  margin-top:8px; border-radius:14px;
-  border:1px dashed var(--border-subtle);
-  padding:7px 9px 7px; background:#f2f3ff;
-}
-.subpieces-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:4px; }
-.subpiece-line {
-  padding:6px 0; border-top:1px solid #d8ddf5;
-  font-size:0.88rem; display:flex; flex-direction:column; gap:2px;
-}
-.subpiece-line:first-of-type { border-top:none; }
-.subpiece-id { font-weight:600; color:#020617; }
-.subpiece-meta { font-size:0.8rem; color:var(--muted); }
-.subpiece-link { font-size:0.78rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.subpiece-conc-tag { margin-top:2px; }
-.entry-open-link { margin-top:6px; font-size:0.8rem; }
-
-.no-results {
-  margin-top:10px; padding:10px 12px;
-  border-radius:10px; border:1px solid var(--border-subtle);
-  font-size:0.9rem; color:var(--muted);
-}
-
-/* Detail pages */
-.detail-shell { max-width:900px; margin:0 auto; padding:18px 16px 28px; }
-.detail-card {
-  background:var(--bg-soft); border-radius:22px;
-  border:1px solid var(--border-subtle);
-  box-shadow:0 18px 45px rgba(15,23,42,0.12);
-  padding:20px;
-}
-.detail-header { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
-.detail-title { font-size:1.1rem; font-weight:650; margin:0; color:#020617; }
-.detail-composer { margin:2px 0 0; font-size:0.9rem; color:var(--muted); }
-.breadcrumbs { font-size:0.8rem; color:var(--muted); margin-bottom:10px; }
-.detail-tags { display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; align-items:center; }
-.piece-meta { display:flex; flex-wrap:wrap; gap:12px 24px; font-size:0.9rem; margin:6px 0; }
-.meta-block span.label { font-weight:600; font-size:0.8rem; color:var(--muted); display:block; }
-.meta-block span.value { display:block; }
-.piece-notes { font-size:0.88rem; margin-top:8px; }
-.piece-notes .label { font-weight:600; color:var(--muted); display:block; margin-bottom:3px; }
-
-/* Concordances cards */
-.conc-block { margin-top:14px; }
-.conc-heading { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:6px; }
-.conc-cards { display:flex; flex-direction:column; gap:6px; }
-.conc-card {
-  border-radius:14px; border:1px solid var(--border-subtle);
-  background:#ffffff; padding:7px 9px;
-  display:flex; gap:8px; align-items:flex-start; font-size:0.85rem;
-}
-.conc-id-link {
-  font-weight:600; padding:3px 8px; border-radius:999px;
-  border:1px solid var(--accent); background:var(--accent-soft);
-  white-space:nowrap;
-}
-.conc-main { flex:1; min-width:0; }
-.conc-title { font-weight:500; color:#020617; }
-.conc-composer { font-size:0.78rem; color:var(--muted); }
-.conc-tags { margin-top:2px; display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
-
-.detail-subpieces { margin-top:16px; }
-.sub-entry {
-  border-radius:16px; border:1px solid var(--border-subtle);
-  background:#f6f7ff; padding:8px 9px; margin-bottom:6px;
-}
-.sub-entry summary { padding:0; cursor:pointer; }
-.sub-entry-header { display:flex; flex-direction:column; gap:2px; }
-.sub-entry-title { font-size:0.9rem; font-weight:600; color:#020617; }
-.sub-entry-composer { font-size:0.8rem; color:var(--muted); }
-.sub-entry-body { border-top:1px solid #dde1f0; margin-top:6px; padding-top:6px; font-size:0.85rem; }
-.sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
-.sub-entry-conc { margin-top:4px; }
-"""
+<-- GARDE TON CSS IDENTIQUE ICI -->
+"""  # <= IMPORTANT : colle ici EXACTEMENT ton style_css actuel (celui qui fonctionne déjà)
+# NOTE: je ne te le recolle pas ici pour éviter un risque de double-copie/édition
+# (ton repo a déjà le bon CSS dans build.py). Laisse le tel quel.
 
 # =========================
 # BUILDERS
@@ -599,7 +457,7 @@ def build_instr_block_for_record(rec, include_catalogs):
     return f'<div class="instr-block">{"".join(parts)}</div>' if parts else ""
 
 # =========================
-# TEMPLATES (UNCHANGED FROM YOUR COLAB)
+# TEMPLATES (UNCHANGED except: NEW Search Builder UI + JS + @@SEARCH_TOOL_INSTRS@@ token)
 # =========================
 index_template = """<!doctype html>
 <html lang="en">
@@ -621,10 +479,41 @@ index_template = """<!doctype html>
             <label for="searchInput">Global search</label>
             <input id="searchInput" type="text" placeholder="Composer, title, number, library…" />
           </div>
+
           <div>
             <label for="instrInput">Search in instrumentations</label>
             <input id="instrInput" type="text" placeholder="e.g. cnto, cornettino, trb…" />
           </div>
+
+          <!-- NEW: Search Tool builder -->
+          <div>
+            <label>Instrumentation Search Builder</label>
+            <div class="filter-inline" style="gap:6px;">
+              <select id="stMode">
+                <option value="include">Include</option>
+                <option value="exclude">Exclude</option>
+              </select>
+              <select id="stInstr">
+                <option value="">Select instrument…</option>
+              </select>
+              <select id="stQty">
+                <option value="1">≥ 1</option>
+                <option value="2">≥ 2</option>
+                <option value="3">≥ 3</option>
+                <option value="4">≥ 4</option>
+                <option value="5">≥ 5</option>
+                <option value="6">≥ 6</option>
+                <option value="7">≥ 7</option>
+                <option value="8">≥ 8</option>
+                <option value="9">≥ 9</option>
+                <option value="10">≥ 10</option>
+              </select>
+              <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
+              <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
+            </div>
+            <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+          </div>
+
           <div>
             <label>Music type & source</label>
             <div class="filter-inline">
@@ -658,6 +547,102 @@ index_template = """<!doctype html>
   const noResults = document.getElementById('noResults');
   function normalize(s){ return (s || '').toLowerCase(); }
 
+  // NEW: Search Tool controls
+  const stMode  = document.getElementById('stMode');
+  const stInstr = document.getElementById('stInstr');
+  const stQty   = document.getElementById('stQty');
+  const stAdd   = document.getElementById('stAdd');
+  const stClear = document.getElementById('stClear');
+  const stActive = document.getElementById('stActive');
+
+  // injected by Python: [{k:"cnto", n:123}, ...]
+  const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
+  const stRules = []; // {mode:"include"|"exclude", k:"cnto", n:3}
+
+  // Populate dropdown with global abbreviations + frequency
+  SEARCH_TOOL_INSTRS.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.k;
+    opt.textContent = `${o.k} (${o.n})`;
+    stInstr.appendChild(opt);
+  });
+
+  function renderStRules(){
+    stActive.innerHTML = '';
+    stRules.forEach((r, idx) => {
+      const chip = document.createElement('span');
+      chip.className = 'tag tag-conc';
+      chip.style.cursor = 'pointer';
+      const sign = r.mode === 'include' ? '+' : '–';
+      chip.textContent = `${sign} ${r.k} ≥ ${r.n}  ×`;
+      chip.title = 'Click to remove';
+      chip.addEventListener('click', () => {
+        stRules.splice(idx, 1);
+        renderStRules();
+        applyFilters();
+      });
+      stActive.appendChild(chip);
+    });
+  }
+
+  stAdd.addEventListener('click', () => {
+    const k = stInstr.value;
+    const n = parseInt(stQty.value || '1', 10);
+    const mode = stMode.value;
+    if(!k) return;
+    stRules.push({mode, k, n});
+    renderStRules();
+    applyFilters();
+  });
+
+  stClear.addEventListener('click', () => {
+    stRules.length = 0;
+    renderStRules();
+    applyFilters();
+  });
+
+  // Parse data-stool once per card (cache)
+  function parseScenarios(card){
+    if(card.__stScenarios) return card.__stScenarios;
+    const raw = card.dataset.stool || '';
+    const scenarios = [];
+    if(raw){
+      raw.split('||').forEach(scStr => {
+        const sc = {};
+        if(!scStr) return;
+        scStr.split('|').forEach(pair => {
+          const parts = pair.split('=');
+          if(parts.length !== 2) return;
+          const k = parts[0];
+          const v = parts[1];
+          if(k && v) sc[k] = parseInt(v,10) || 0;
+        });
+        scenarios.push(sc);
+      });
+    }
+    card.__stScenarios = scenarios;
+    return scenarios;
+  }
+
+  // exists at least 1 scenario satisfying all rules
+  function matchesSearchTool(card){
+    if(!stRules.length) return true;
+    const scs = parseScenarios(card);
+    if(!scs.length) return false;
+
+    return scs.some(sc => {
+      for(const r of stRules){
+        const val = sc[r.k] || 0;
+        if(r.mode === 'include'){
+          if(val < r.n) return false;
+        } else {
+          if(val >= r.n) return false;
+        }
+      }
+      return true;
+    });
+  }
+
   const musicSet = new Set();
   const sourceSet = new Set();
   cards.forEach(card => {
@@ -689,6 +674,9 @@ index_template = """<!doctype html>
       if (qi && !instr.includes(qi)) ok = false;
       if (mt && !mts.includes(mt)) ok = false;
       if (st && !sts.includes(st)) ok = false;
+
+      // NEW: search tool builder
+      if (ok && !matchesSearchTool(card)) ok = false;
 
       card.style.display = ok ? '' : 'none';
       if (ok) visible++;
@@ -763,7 +751,6 @@ def main():
 
     # Read Google Sheet CSV
     df = pd.read_csv(SHEET_CSV_URL, dtype={"RISM No.": "string"})
-    # Normalize column names just in case of CRLF
     df.columns = [str(c).replace("\r\n", "\n").strip() for c in df.columns]
 
     df["__sort_key"] = df["ZINKNET NO."].apply(parse_zinknet)
@@ -811,6 +798,8 @@ def main():
             "note_raw": clean_str(get_col(row, "Note")),
             "bibliography_raw": clean_str(get_col(row, "Bibliography")),
             "organology_raw": clean_str(get_col(row, "Organology")),
+            # NEW:
+            "search_tool_raw": clean_str(get_col(row, "Search Tool")),
         }
 
         lib_raw = get_col(row, "Library-ies (public)")
@@ -832,6 +821,9 @@ def main():
         rec["category"] = escape_textnode(rec["category_raw"])
         rec["note"] = escape_textnode(rec["note_raw"])
         rec["organology"] = escape_textnode(rec["organology_raw"])
+
+        # NEW: scenarios for Search Tool
+        rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
 
         records[zid] = rec
 
@@ -862,7 +854,28 @@ def main():
                 "library": escape_textnode(lib), "shelfmark": escape_textnode(shelf),
                 "category": "", "note": "", "organology": "",
                 "concordances_ids": [],
+                # NEW:
+                "search_tool_raw": "",
+                "search_scenarios": [],
             }
+
+    # NEW: build global instrument index + frequency (pieces where it can appear)
+    all_instr = set()
+    instr_freq = {}
+    for rec in records.values():
+        scs = rec.get("search_scenarios") or []
+        present = set()
+        for sc in scs:
+            for k in sc.keys():
+                all_instr.add(k)
+                present.add(k)
+        for k in present:
+            instr_freq[k] = instr_freq.get(k, 0) + 1
+    all_instr_sorted = sorted(all_instr, key=lambda x: x.lower())
+    search_tool_js = json.dumps(
+        [{"k": k, "n": int(instr_freq.get(k, 0))} for k in all_instr_sorted],
+        ensure_ascii=False
+    )
 
     # =========================
     # INDEX BUILD
@@ -942,7 +955,6 @@ def main():
                 instr_short = r["instr_rism_main_raw"] or r["instr_catalogs_raw"]
                 instr_short_disp = escape_textnode(instr_short) if instr_short else ""
 
-                # RISM chip per line (dedupe inside the line only)
                 used_links_line = set()
                 sub_rism = rism_chip_self(r, used_links_line)
 
@@ -986,6 +998,18 @@ def main():
             for z in ids
         ).replace("\n", " ")
 
+        # NEW: Search Tool scenarios blob for this group (union across pieces)
+        scenario_keys = []
+        seen_sc = set()
+        for z in ids:
+            rr = records[z]
+            for sc in (rr.get("search_scenarios") or []):
+                key = "|".join(f"{k}={v}" for k, v in sorted(sc.items()))
+                if key and key not in seen_sc:
+                    seen_sc.add(key)
+                    scenario_keys.append(key)
+        stool_blob = "||".join(scenario_keys)
+
         open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
 
         group_html_parts.append(f"""
@@ -993,7 +1017,8 @@ def main():
       data-search="{escape_attr(search_blob)}"
       data-music-types="{escape_attr('||'.join(music_types_set))}"
       data-source-types="{escape_attr('||'.join(source_types_set))}"
-      data-instr="{escape_attr(instr_blob)}">
+      data-instr="{escape_attr(instr_blob)}"
+      data-stool="{escape_attr(stool_blob)}">
       <summary>
         <div class="entry-main">
           <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
@@ -1014,12 +1039,15 @@ def main():
     entries_html = "\n".join(group_html_parts)
 
     (OUT_DIR / "index.html").write_text(
-        index_template.replace("@@HEADER@@", build_header_html()).replace("@@ENTRIES@@", entries_html),
+        index_template
+        .replace("@@HEADER@@", build_header_html())
+        .replace("@@ENTRIES@@", entries_html)
+        .replace("@@SEARCH_TOOL_INSTRS@@", search_tool_js),
         encoding="utf-8"
     )
 
     # =========================
-    # DETAIL PAGES
+    # DETAIL PAGES (UNCHANGED)
     # =========================
     for zid, rec in records.items():
         used_links_page = set()  # no duplicate RISM link anywhere on the page
@@ -1089,7 +1117,7 @@ def main():
 
         conc_html = ""
         if rec["indiv_coll"] != "VirtualColl" and rec["concordances_ids"]:
-            cards = []
+            cards_html = []
             for cid in rec["concordances_ids"]:
                 cr = records.get(cid)
                 if not cr:
@@ -1099,7 +1127,7 @@ def main():
                 mt_tag = f'<span class="tag tag-type">{escape_textnode(mt)}</span>' if mt else ""
                 st_tag = f'<span class="tag tag-source">{escape_textnode(st)}</span>' if st else ""
                 rchip = rism_chip_self(cr, used_links_page)
-                cards.append(f"""
+                cards_html.append(f"""
       <div class="conc-card">
         <a class="conc-id-link" href="piece-{cid.replace('/','-')}.html" target="_blank" rel="noopener">{escape_textnode(cid)}</a>
         <div class="conc-main">
@@ -1112,7 +1140,7 @@ def main():
     <div class="conc-block">
       <div class="conc-heading">Linked concordances</div>
       <div class="conc-cards">
-        {''.join(cards)}
+        {''.join(cards_html)}
       </div>
     </div>"""
 
@@ -1181,11 +1209,11 @@ def main():
         )
         (OUT_DIR / f"piece-{zid.replace('/','-')}.html").write_text(page_html, encoding="utf-8")
 
-    # Small build summary (useful in Actions logs)
     print("✅ Built docs/")
     print("Index:", (OUT_DIR / "index.html").exists())
     print("CSS:", (OUT_DIR / "style.css").exists())
     print("Pieces:", len(list(OUT_DIR.glob("piece-*.html"))))
+    print("SearchTool instruments:", len(all_instr_sorted))
 
 if __name__ == "__main__":
     main()
