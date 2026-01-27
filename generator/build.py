@@ -912,25 +912,6 @@ index_template = """<!doctype html>
     });
   }
 
-stAdd.addEventListener('click', () => {
-  const k = stInstr.value;
-  const mode = stMode.value;
-
-  // robust numeric parse
-  const n = Number(stQty.value);
-
-  if(!k) return;
-
-  if(!Number.isFinite(n) || n <= 0){
-    alert("Qty is invalid (please select a number like ≥ 1, ≥ 2, …).");
-    return;
-  }
-
-  stRules.push({mode, k, n});
-  renderStRules();
-  applyFilters();
-});
-
   stClear.addEventListener('click', () => {
     stRules.length = 0;
     renderStRules();
@@ -960,27 +941,29 @@ stAdd.addEventListener('click', () => {
     return scenarios;
   }
 
-  // exists at least 1 scenario satisfying all rules
-  function matchesSearchTool(card){
-    if(!stRules.length) return true;
-    const scs = parseScenarios(card);
-    if(!scs.length) return false;
+ function matchesSearchTool(card){
+  if(!stRules.length) return true;
+  const scs = parseScenarios(card);
+  if(!scs.length) return false;
 
-    const need = Number(r.n);
-if(!Number.isFinite(need)) return false; // if rule corrupted, never match
+  return scs.some(sc => {
+    for(const r of stRules){
+      const val = sc[r.k] || 0;
 
-    return scs.some(sc => {
-      for(const r of stRules){
-        const val = sc[r.k] || 0;
-        if(r.mode === 'include'){
-          if(val < r.n) return false;
-        } else {
-          if(val >= r.n) return false;
-        }
+      // IMPORTANT: force numeric threshold (prevents NaN bugs)
+      const need = Number(r.n);
+      if(!Number.isFinite(need)) return false;
+
+      if(r.mode === 'include'){
+        if(val < need) return false;
+      } else {
+        if(val >= need) return false;
       }
-      return true;
-    });
-  }
+    }
+    return true;
+  });
+}
+
 
   const musicSet = new Set();
   const sourceSet = new Set();
