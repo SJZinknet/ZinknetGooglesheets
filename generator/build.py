@@ -325,7 +325,9 @@ def parse_search_tool_to_scenarios(text, limit=256):
                 base2[k] = base2.get(k, 0) + v
             scenarios.extend(_expand_choices(base2, choices, limit=limit))
     else:
-        # No top-level branches: parse as items + choice blocks at top level
+        # No top-level branches.
+        # IMPORTANT: common_items already contains all plain "name (n)" tokens from the first pass.
+        # Here we only collect top-level choice blocks like "[a/b (n)]" so we don't double-count.
         base = dict(common_items)
         choices = []
         for seg in top:
@@ -336,11 +338,6 @@ def parse_search_tool_to_scenarios(text, limit=256):
                 ch = _parse_choice_block(seg)
                 if ch:
                     choices.append(ch)
-            else:
-                it = _parse_item_token(seg)
-                if it:
-                    name, qty = it
-                    base[name] = base.get(name, 0) + qty
         scenarios = _expand_choices(base, choices, limit=limit)
 
     # Deduplicate scenarios
