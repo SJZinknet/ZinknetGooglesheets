@@ -912,15 +912,24 @@ index_template = """<!doctype html>
     });
   }
 
-  stAdd.addEventListener('click', () => {
-    const k = stInstr.value;
-    const n = parseInt(stQty.value || '1', 10);
-    const mode = stMode.value;
-    if(!k) return;
-    stRules.push({mode, k, n});
-    renderStRules();
-    applyFilters();
-  });
+stAdd.addEventListener('click', () => {
+  const k = stInstr.value;
+  const mode = stMode.value;
+
+  // robust numeric parse
+  const n = Number(stQty.value);
+
+  if(!k) return;
+
+  if(!Number.isFinite(n) || n <= 0){
+    alert("Qty is invalid (please select a number like ≥ 1, ≥ 2, …).");
+    return;
+  }
+
+  stRules.push({mode, k, n});
+  renderStRules();
+  applyFilters();
+});
 
   stClear.addEventListener('click', () => {
     stRules.length = 0;
@@ -956,6 +965,9 @@ index_template = """<!doctype html>
     if(!stRules.length) return true;
     const scs = parseScenarios(card);
     if(!scs.length) return false;
+
+    const need = Number(r.n);
+if(!Number.isFinite(need)) return false; // if rule corrupted, never match
 
     return scs.some(sc => {
       for(const r of stRules){
