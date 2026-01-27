@@ -820,6 +820,10 @@ index_template = """<!doctype html>
               <select id="stInstr">
                 <option value="">Select instrument…</option>
               </select>
+              <select id="stCmp">
+  <option value="atleast">≥</option>
+  <option value="exact">=</option>
+</select>
               <select id="stQty">
                 <option value="1">≥ 1</option>
                 <option value="2">≥ 2</option>
@@ -877,6 +881,7 @@ index_template = """<!doctype html>
   const stInstr = document.getElementById('stInstr');
   const stQty   = document.getElementById('stQty');
   const stQtyDebug = document.getElementById('stQtyDebug');
+  const stCmp   = document.getElementById('stCmp');
 
 function updateQtyDebug(){
   stQtyDebug.textContent = 'value used = ' + stQty.value;
@@ -890,7 +895,7 @@ updateQtyDebug();
 
   // injected by Python: [{k:"cnto", n:123}, ...]
   const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
-  const stRules = []; // {mode:"include"|"exclude", k:"cnto", n:3}
+const stRules = []; // {mode:"include"|"exclude", k:"cnto", n:3, cmp:"atleast"|"exact"}
 
   // Populate dropdown with global abbreviations + frequency
   SEARCH_TOOL_INSTRS.forEach(o => {
@@ -906,8 +911,9 @@ updateQtyDebug();
       const chip = document.createElement('span');
       chip.className = 'tag tag-conc';
       chip.style.cursor = 'pointer';
-      const sign = r.mode === 'include' ? '+' : '–';
-      chip.textContent = `${sign} ${r.k} ≥ ${r.n}  ×`;
+const sign = r.mode === 'include' ? '+' : '–';
+const op = (r.cmp === 'exact') ? '=' : '≥';
+chip.textContent = `${sign} ${r.k} ${op} ${r.n}  ×`;
       chip.title = 'Click to remove';
       chip.addEventListener('click', () => {
         stRules.splice(idx, 1);
@@ -918,15 +924,19 @@ updateQtyDebug();
     });
   }
 
-  stAdd.addEventListener('click', () => {
-    const k = stInstr.value;
-    const n = parseInt(stQty.value || '1', 10);
-    const mode = stMode.value;
-    if(!k) return;
-    stRules.push({mode, k, n});
-    renderStRules();
-    applyFilters();
-  });
+stAdd.addEventListener('click', () => {
+  const k = stInstr.value;
+  const mode = stMode.value;
+  const cmp = stCmp.value;           // "atleast" or "exact"
+  const n = Number(stQty.value);
+
+  if(!k) return;
+  if(!Number.isFinite(n) || n <= 0) return;
+
+  stRules.push({mode, k, n, cmp});
+  renderStRules();
+  applyFilters();
+});
 
   stClear.addEventListener('click', () => {
     stRules.length = 0;
@@ -1291,8 +1301,18 @@ def main():
                 used_links_line = set()
                 sub_rism = rism_chip_self(r, used_links_line)
 
+                # per-piece Search Tool scenarios blob (no double-count; already fixed upstream)
+seen_sc_piece = set()
+scenario_keys_piece = []
+for sc in (r.get("search_scenarios") or []):
+    key = "|".join(f"{k}={v}" for k, v in sorted(sc.items()))
+    if key and key not in seen_sc_piece:
+        seen_sc_piece.add(key)
+        scenario_keys_piece.append(key)
+stool_blob_piece = "||".join(scenario_keys_piece)
+                
                 sub_lines.append(f"""
-      <div class="subpiece-line">
+<div class="subpiece-line" data-stool-piece="{escape_attr(stool_blob_piece)}">
         <div><span class="subpiece-id">{escape_textnode(pid)} — {r['title'] or '(Untitled)'}</span></div>
         <div class="subpiece-meta">{r['composer'] or ''}</div>
         <div class="subpiece-meta">{instr_short_disp}</div>
