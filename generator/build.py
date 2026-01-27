@@ -427,6 +427,7 @@ def build_header_html():
 # =========================
 style_css = r"""
 
+
 :root {
   --bg: #f4f5fb;
   --bg-soft: #ffffff;
@@ -754,6 +755,7 @@ dd.meta-value { margin:0; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
 
+
 """  # <= IMPORTANT : colle ici EXACTEMENT ton style_css actuel (celui qui fonctionne déjà)
 # NOTE: je ne te le recolle pas ici pour éviter un risque de double-copie/édition
 # (ton repo a déjà le bon CSS dans build.py). Laisse le tel quel.
@@ -912,6 +914,16 @@ index_template = """<!doctype html>
     });
   }
 
+  stAdd.addEventListener('click', () => {
+    const k = stInstr.value;
+    const n = parseInt(stQty.value || '1', 10);
+    const mode = stMode.value;
+    if(!k) return;
+    stRules.push({mode, k, n});
+    renderStRules();
+    applyFilters();
+  });
+
   stClear.addEventListener('click', () => {
     stRules.length = 0;
     renderStRules();
@@ -941,29 +953,24 @@ index_template = """<!doctype html>
     return scenarios;
   }
 
- function matchesSearchTool(card){
-  if(!stRules.length) return true;
-  const scs = parseScenarios(card);
-  if(!scs.length) return false;
+  // exists at least 1 scenario satisfying all rules
+  function matchesSearchTool(card){
+    if(!stRules.length) return true;
+    const scs = parseScenarios(card);
+    if(!scs.length) return false;
 
-  return scs.some(sc => {
-    for(const r of stRules){
-      const val = sc[r.k] || 0;
-
-      // IMPORTANT: force numeric threshold (prevents NaN bugs)
-      const need = Number(r.n);
-      if(!Number.isFinite(need)) return false;
-
-      if(r.mode === 'include'){
-        if(val < need) return false;
-      } else {
-        if(val >= need) return false;
+    return scs.some(sc => {
+      for(const r of stRules){
+        const val = sc[r.k] || 0;
+        if(r.mode === 'include'){
+          if(val < r.n) return false;
+        } else {
+          if(val >= r.n) return false;
+        }
       }
-    }
-    return true;
-  });
-}
-
+      return true;
+    });
+  }
 
   const musicSet = new Set();
   const sourceSet = new Set();
