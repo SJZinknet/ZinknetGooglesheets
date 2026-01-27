@@ -835,6 +835,7 @@ index_template = """<!doctype html>
                 <option value="9">≥ 9</option>
                 <option value="10">≥ 10</option>
               </select>
+              <span id="stQtyDebug" style="font-size:0.7rem;color:#b00020;"></span>
               <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
               <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
             </div>
@@ -878,6 +879,14 @@ index_template = """<!doctype html>
   const stMode  = document.getElementById('stMode');
   const stInstr = document.getElementById('stInstr');
   const stQty   = document.getElementById('stQty');
+  const stQtyDebug = document.getElementById('stQtyDebug');
+
+function updateQtyDebug(){
+  stQtyDebug.textContent = 'value used = ' + stQty.value;
+}
+
+stQty.addEventListener('change', updateQtyDebug);
+updateQtyDebug();
   const stAdd   = document.getElementById('stAdd');
   const stClear = document.getElementById('stClear');
   const stActive = document.getElementById('stActive');
