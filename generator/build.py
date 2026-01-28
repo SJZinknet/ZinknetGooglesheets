@@ -1,16 +1,12 @@
 # generator/build.py
 # ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
-# Features:
-#  - Static site generator: index + detail pages
-#  - Reads Google Sheet CSV
-#  - "Search Tool" instrumentation parsing into scenarios
-#  - Instrumentation Search Builder UI:
-#       include/exclude + (>= or =) + qty + dropdown indexed from sheet
-#  - Collection intelligent mode:
-#       when Search Tool rules are active, collections show X/Y matching pieces
-#       and hide non-matching subpieces in the "Contents" list
+# Adds:
+# - Instrumentation Search Tool builder (existing)
+# - RISM fields from Google Sheet: RISM Holdings, RISM Date (display+search), RISM Earliest/Latest Year (filter only)
+# - Index: RISM date chip + chronology filter (From/To) based on earliest/latest, hidden from UI
+# - Detail page: RISM drawer (variant B-style) showing RISM Date + Holdings (earliest/latest not shown)
 
-import os, re, html, shutil, json
+import re, html, shutil, json
 from pathlib import Path
 import pandas as pd
 
@@ -116,7 +112,7 @@ def format_uniform_instr(raw_text, alternative=False):
         content = m.group(2).strip()
         return f"\n{label} {content}\n"
 
-    t2 = re.sub(r'([^:]+:\s*)\{([^}]*)\}', repl, s)
+    t2 = re.sub(r'([^:]+:\s*)\{([^}]*)\}', repl, s)   # remove braces, insert breaks
     t2 = re.sub(r'\n\s*,\s*', '\n', t2)
     t2 = re.sub(r'\n+', '\n', t2).strip(' \n,')
     if not t2.strip():
@@ -180,6 +176,15 @@ def norm_music_type(s):
 
 def norm_url(u):
     return clean_str(u).strip()
+
+def parse_int_safe(x):
+    x = clean_numberish(x)
+    if not x:
+        return None
+    try:
+        return int(x)
+    except ValueError:
+        return None
 
 # =========================
 # Search Tool parser
@@ -250,7 +255,7 @@ def _parse_branch(branch_block):
     for p in parts:
         if not p:
             continue
-        if p.strip().startswith("[") and p.strip().endswith("]"):
+        if p.startswith("[") and p.endswith("]"):
             ch = _parse_choice_block(p)
             if ch:
                 choices.append(ch)
@@ -264,7 +269,7 @@ def _parse_branch(branch_block):
 def _expand_choices(base_items, choices, limit=256):
     """
     Enumerate scenarios by choosing one alt from each choice group.
-    limit avoids explosion.
+    limit avoids explosion; if exceeded we stop.
     Returns list of dict instrument->qty
     """
     scenarios = [dict(base_items)]
@@ -290,39 +295,39 @@ def parse_search_tool_to_scenarios(text, limit=256):
       - comma-separated top-level items
       - may contain ONE top-level branch expression: [branchA] / [branchB] / ...
       - branch content uses '+' for co-presence and [a/b (n)] choices
-
     Returns list of scenarios: list[dict instr->qty]
     """
     s = clean_str(text)
     if not s:
         return []
     s = re.sub(r"\s+", " ", s).strip()
-
     top = _split_top_level(s, ",")
 
-    common_items = {}
-    branch_blocks = None  # list of branch strings
-
-    # First pass: detect branches and collect plain tokens
-    for seg in top:
+    # Detect one top-level branch segment, of the form: [ ... ] / [ ... ] ...
+    branch_blocks = None
+    branch_seg_idx = None
+    for i, seg in enumerate(top):
         seg = seg.strip()
-        if not seg:
-            continue
-
-        # Detect top-level: [ ... ] / [ ... ] ...
         if seg.startswith("[") and seg.endswith("]") and "/" in seg:
             parts = _split_top_level(seg, "/")
             if len(parts) >= 2 and all(p.strip().startswith("[") and p.strip().endswith("]") for p in parts):
                 branch_blocks = [p.strip() for p in parts]
-                continue
-
-        it = _parse_item_token(seg)
-        if it:
-            name, qty = it
-            common_items[name] = common_items.get(name, 0) + qty
+                branch_seg_idx = i
+                break
 
     scenarios = []
+
     if branch_blocks:
+        # common items are the item tokens outside the branch segment
+        common_items = {}
+        for j, seg in enumerate(top):
+            if j == branch_seg_idx:
+                continue
+            it = _parse_item_token(seg)
+            if it:
+                name, qty = it
+                common_items[name] = common_items.get(name, 0) + qty
+
         for bb in branch_blocks:
             base, choices = _parse_branch(bb)
             base2 = dict(common_items)
@@ -330,9 +335,8 @@ def parse_search_tool_to_scenarios(text, limit=256):
                 base2[k] = base2.get(k, 0) + v
             scenarios.extend(_expand_choices(base2, choices, limit=limit))
     else:
-        # IMPORTANT: common_items already contains all plain "name (n)" tokens.
-        # Here we only collect top-level choice blocks like "[a/b (n)]"
-        base = dict(common_items)
+        # no top-level branches: parse once (no double-counting)
+        base = {}
         choices = []
         for seg in top:
             seg = seg.strip()
@@ -342,6 +346,11 @@ def parse_search_tool_to_scenarios(text, limit=256):
                 ch = _parse_choice_block(seg)
                 if ch:
                     choices.append(ch)
+            else:
+                it = _parse_item_token(seg)
+                if it:
+                    name, qty = it
+                    base[name] = base.get(name, 0) + qty
         scenarios = _expand_choices(base, choices, limit=limit)
 
     # Deduplicate scenarios
@@ -380,12 +389,13 @@ def rism_chip_collection(parent_rec, used_links=None):
     return rism_chip_unique(link, "RISM Online (Collection)", used_links)
 
 def rism_duo(self_chip_html, coll_chip_html):
+    """Elegant double-chip wrapper with a thin divider."""
     if self_chip_html and coll_chip_html:
         return f'<span class="rism-duo">{self_chip_html}<span class="rism-divider"></span>{coll_chip_html}</span>'
     return self_chip_html or coll_chip_html or ""
 
 # =========================
-# HEADER
+# HEADER (logos fixed names)
 # =========================
 def build_header_html():
     def logo_img(filename, alt, cls):
@@ -503,7 +513,7 @@ h1{
   width:auto;
   filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
 }
-.hem-logo{ height: 58px; }
+.hem-logo{ height: 58px; }  /* HEM larger only */
 .rism-logo{ height: 30px; }
 
 .collab-line{
@@ -561,7 +571,7 @@ h1{
   text-transform:uppercase; letter-spacing:.14em;
   color:var(--muted); margin-bottom:6px;
 }
-.filters input[type="text"] {
+.filters input[type="text"], .filters input[type="number"] {
   width:100%; border-radius:999px;
   border:1px solid var(--border-subtle);
   background:#fafaff;
@@ -576,7 +586,8 @@ h1{
   outline:none; cursor:pointer;
 }
 .filters-row { display:flex; flex-direction:column; gap:10px; }
-.filter-inline { display:flex; gap:8px; flex-wrap:wrap; }
+.filter-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.filter-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
 
 .entries { max-height: calc(100vh - 170px); overflow:auto; padding-right:4px; }
 
@@ -613,6 +624,7 @@ summary::-webkit-details-marker { display:none; }
 .tag-count { background: var(--green-collection-bg); border-color: var(--green-collection); color: var(--green-collection); font-weight:650; }
 .tag-conc { border:1px solid var(--border-subtle); background:#ffffff; }
 
+/* RISM mini-chip */
 .tag-rism{
   border-color: var(--violet-border);
   background: var(--violet-bg);
@@ -621,6 +633,8 @@ summary::-webkit-details-marker { display:none; }
   letter-spacing:.12em;
   font-weight:650;
 }
+
+/* Elegant duo wrapper */
 .rism-duo{
   display:inline-flex;
   align-items:center;
@@ -634,6 +648,8 @@ summary::-webkit-details-marker { display:none; }
   background: rgba(76,29,149,0.35);
   border-radius:1px;
 }
+
+/* See RISM (violet, harmonized) */
 .see-rism-tag {
   display:inline-flex; align-items:center; margin-left:6px;
   padding:2px 6px; border-radius:999px;
@@ -679,12 +695,20 @@ dd.meta-value { margin:0; }
   border:1px dashed var(--border-subtle);
   padding:7px 9px 7px; background:#f2f3ff;
 }
-.subpieces-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:4px; }
+.subpieces-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:4px; display:flex; gap:8px; align-items:center; }
+.subpieces-matchcount{ font-size:.74rem; color:var(--violet-text); opacity:.85; }
 .subpiece-line {
   padding:6px 0; border-top:1px solid #d8ddf5;
   font-size:0.88rem; display:flex; flex-direction:column; gap:2px;
 }
 .subpiece-line:first-of-type { border-top:none; }
+.subpiece-line.match {
+  border-top:1px solid rgba(139,92,246,0.35);
+  background: rgba(139,92,246,0.07);
+  border-radius:10px;
+  padding-left:8px;
+  padding-right:8px;
+}
 .subpiece-id { font-weight:600; color:#020617; }
 .subpiece-meta { font-size:0.8rem; color:var(--muted); }
 .subpiece-link { font-size:0.78rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -747,6 +771,62 @@ dd.meta-value { margin:0; }
 .sub-entry-body { border-top:1px solid #dde1f0; margin-top:6px; padding-top:6px; font-size:0.85rem; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
+
+/* NEW: RISM drawer on detail pages (variant B) */
+details.rism {
+  margin-top:14px;
+  border:1.5px solid rgba(139,92,246,0.35);
+  background: linear-gradient(180deg, rgba(139,92,246,0.08), rgba(255,255,255,0.95));
+  border-radius:18px;
+  padding: 10px 12px;
+}
+details.rism > summary{
+  cursor:pointer;
+  list-style:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+details.rism > summary::-webkit-details-marker{display:none}
+.rism-left{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.rism-title{
+  font-size:.78rem; text-transform:uppercase; letter-spacing:.14em;
+  color:var(--violet-text);
+  font-weight:800;
+}
+.rism-mini{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+.rism-mini .pill{
+  font-size:.74rem;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid rgba(139,92,246,0.45);
+  background: rgba(139,92,246,0.10);
+  color: var(--violet-text);
+  white-space:nowrap;
+}
+.rism-body{
+  margin-top:10px;
+  border-top:1px solid rgba(139,92,246,0.22);
+  padding-top:10px;
+  display:grid;
+  grid-template-columns: minmax(0,1fr);
+  gap:10px;
+}
+.rism-kv{
+  display:grid;
+  grid-template-columns: minmax(0,140px) minmax(0,1fr);
+  gap:6px 10px;
+  font-size:.88rem;
+}
+.rism-kv .k{color:var(--muted); font-weight:600; font-size:.80rem}
+.rism-kv .v{color:#111827}
+.rism-holdings{
+  margin:0; padding-left:16px;
+  font-size:.88rem; line-height:1.35;
+  max-height: 260px; overflow:auto;
+}
+.rism-hint{font-size:.80rem; color:var(--muted);}
 """
 
 # =========================
@@ -773,6 +853,32 @@ def build_instr_block_for_record(rec, include_catalogs):
             f'<div class="instr-content">{rec["instr_catalogs"]}</div></div>'
         )
     return f'<div class="instr-block">{"".join(parts)}</div>' if parts else ""
+
+def holdings_lines(txt):
+    txt = clean_str(txt)
+    if not txt:
+        return []
+    # split on newline, ignore empties
+    return [ln.strip() for ln in re.split(r"\r?\n", txt) if ln.strip()]
+
+def holdings_list_html(txt):
+    lines = holdings_lines(txt)
+    if not lines:
+        return ""
+    lis = "".join(f"<li>{html.escape(ln, quote=False)}</li>" for ln in lines)
+    return f'<ul class="rism-holdings">{lis}</ul>'
+
+def unique_nonempty(seq):
+    out = []
+    seen = set()
+    for x in seq:
+        x = clean_str(x)
+        if not x:
+            continue
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
 
 # =========================
 # TEMPLATES
@@ -803,6 +909,16 @@ index_template = """<!doctype html>
             <input id="instrInput" type="text" placeholder="e.g. cnto, cornettino, trb…" />
           </div>
 
+          <!-- NEW: RISM chronology filter (Earliest/Latest used internally, not displayed) -->
+          <div>
+            <label>RISM chronology</label>
+            <div class="filter-grid-2">
+              <input id="yearFrom" type="number" inputmode="numeric" placeholder="From (e.g. 1650)" />
+              <input id="yearTo" type="number" inputmode="numeric" placeholder="To (e.g. 1750)" />
+            </div>
+          </div>
+
+          <!-- Search Tool builder -->
           <div>
             <label>Instrumentation Search Builder</label>
             <div class="filter-inline" style="gap:6px;">
@@ -811,15 +927,15 @@ index_template = """<!doctype html>
                 <option value="exclude">Exclude</option>
               </select>
 
+              <!-- NEW: exact vs ≥ -->
+              <select id="stCmp">
+                <option value="gte">≥</option>
+                <option value="eq">=</option>
+              </select>
+
               <select id="stInstr">
                 <option value="">Select instrument…</option>
               </select>
-
-              <select id="stCmp">
-                <option value="atleast">≥</option>
-                <option value="exact">=</option>
-              </select>
-
               <select id="stQty">
                 <option value="1">1</option>
                 <option value="2">2</option>
@@ -832,7 +948,6 @@ index_template = """<!doctype html>
                 <option value="9">9</option>
                 <option value="10">10</option>
               </select>
-
               <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
               <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
             </div>
@@ -865,6 +980,8 @@ index_template = """<!doctype html>
 <script>
   const searchInput = document.getElementById('searchInput');
   const instrInput = document.getElementById('instrInput');
+  const yearFrom = document.getElementById('yearFrom');
+  const yearTo = document.getElementById('yearTo');
   const musicFilter = document.getElementById('musicFilter');
   const sourceFilter = document.getElementById('sourceFilter');
   const entriesContainer = document.getElementById('entries');
@@ -872,10 +989,17 @@ index_template = """<!doctype html>
   const noResults = document.getElementById('noResults');
   function normalize(s){ return (s || '').toLowerCase(); }
 
+  function parseIntSafe(x){
+    const n = parseInt(x, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // -------------------------
   // Search Tool controls
+  // -------------------------
   const stMode  = document.getElementById('stMode');
+  const stCmp   = document.getElementById('stCmp');
   const stInstr = document.getElementById('stInstr');
-  const stCmp   = document.getElementById('stCmp');   // "atleast" | "exact"
   const stQty   = document.getElementById('stQty');
   const stAdd   = document.getElementById('stAdd');
   const stClear = document.getElementById('stClear');
@@ -883,11 +1007,8 @@ index_template = """<!doctype html>
 
   // injected by Python: [{k:"cnto", n:123}, ...]
   const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
+  const stRules = []; // {mode:"include"|"exclude", cmp:"gte"|"eq", k:"cnto", n:3}
 
-  // rules: {mode:"include"|"exclude", k:"cnto", cmp:"atleast"|"exact", n:3}
-  const stRules = [];
-
-  // Populate dropdown with global abbreviations + frequency
   SEARCH_TOOL_INSTRS.forEach(o => {
     const opt = document.createElement('option');
     opt.value = o.k;
@@ -902,8 +1023,8 @@ index_template = """<!doctype html>
       chip.className = 'tag tag-conc';
       chip.style.cursor = 'pointer';
       const sign = r.mode === 'include' ? '+' : '–';
-      const op = (r.cmp === 'exact') ? '=' : '≥';
-      chip.textContent = `${sign} ${r.k} ${op} ${r.n}  ×`;
+      const cmp = (r.cmp === 'eq') ? '=' : '≥';
+      chip.textContent = `${sign} ${r.k} ${cmp} ${r.n}  ×`;
       chip.title = 'Click to remove';
       chip.addEventListener('click', () => {
         stRules.splice(idx, 1);
@@ -916,14 +1037,11 @@ index_template = """<!doctype html>
 
   stAdd.addEventListener('click', () => {
     const k = stInstr.value;
+    const n = parseInt(stQty.value || '1', 10);
     const mode = stMode.value;
     const cmp = stCmp.value;
-    const n = Number(stQty.value);
-
     if(!k) return;
-    if(!Number.isFinite(n) || n <= 0) return;
-
-    stRules.push({mode, k, cmp, n});
+    stRules.push({mode, cmp, k, n});
     renderStRules();
     applyFilters();
   });
@@ -934,76 +1052,172 @@ index_template = """<!doctype html>
     applyFilters();
   });
 
-  // Add a per-card match tag (hidden by default) for collection intelligent mode
-  cards.forEach(card => {
-    const tagsRow = card.querySelector('.entry-tags');
-    if(tagsRow){
-      const t = document.createElement('span');
-      t.className = 'tag tag-conc st-match-tag';
-      t.style.display = 'none';
-      tagsRow.appendChild(t);
-      card.__stMatchTag = t;
-    }
-  });
+  // -------------------------
+  // Cache parsers per card
+  // -------------------------
+  function parseSearchToolPieces(card){
+    if(card.__stPieces) return card.__stPieces;
 
-  // Parse scenarios (card-level) once per card (cache)
-  function parseScenarios(card){
-    if(card.__stScenarios) return card.__stScenarios;
-    const raw = card.dataset.stool || '';
-    card.__stScenarios = parseScenariosFromBlob(raw);
-    return card.__stScenarios;
-  }
-
-  function parseScenariosFromBlob(raw){
-    const scenarios = [];
+    const raw = card.dataset.stoolPieces || '';
+    const pieces = [];
     if(raw){
-      raw.split('||').forEach(scStr => {
-        const sc = {};
-        if(!scStr) return;
-        scStr.split('|').forEach(pair => {
-          const parts = pair.split('=');
-          if(parts.length !== 2) return;
-          const k = parts[0];
-          const v = parts[1];
-          if(k && v) sc[k] = parseInt(v,10) || 0;
+      // format: pid@@sc1||sc2##pid@@sc1||...
+      raw.split('##').forEach(chunk => {
+        if(!chunk) return;
+        const parts = chunk.split('@@');
+        if(parts.length !== 2) return;
+        const pid = parts[0];
+        const scRaw = parts[1] || '';
+        const scenarios = [];
+
+        scRaw.split('||').forEach(scStr => {
+          if(!scStr) return;
+          const sc = {};
+          scStr.split('|').forEach(pair => {
+            const kv = pair.split('=');
+            if(kv.length !== 2) return;
+            const k = kv[0];
+            const v = kv[1];
+            if(k && v) sc[k] = parseInt(v, 10) || 0;
+          });
+          scenarios.push(sc);
         });
-        scenarios.push(sc);
+
+        pieces.push({pid, scenarios});
       });
     }
-    return scenarios;
+    card.__stPieces = pieces;
+    return pieces;
   }
 
-  function rulePasses(val, r){
-    const need = Number(r.n);
-    if(!Number.isFinite(need)) return false;
-    if(r.cmp === 'exact') return val === need;
-    return val >= need; // "atleast"
+  function parseYearRangesPieces(card){
+    if(card.__yrPieces) return card.__yrPieces;
+
+    const raw = card.dataset.yrPieces || '';
+    const pieces = [];
+    if(raw){
+      // format: pid@@min:max||min:max##pid@@...
+      raw.split('##').forEach(chunk => {
+        if(!chunk) return;
+        const parts = chunk.split('@@');
+        if(parts.length !== 2) return;
+        const pid = parts[0];
+        const rangesRaw = parts[1] || '';
+        const ranges = [];
+
+        rangesRaw.split('||').forEach(r => {
+          if(!r) return;
+          const mm = r.split(':');
+          if(mm.length !== 2) return;
+          const a = parseIntSafe(mm[0]);
+          const b = parseIntSafe(mm[1]);
+          if(a !== null && b !== null) ranges.push([a,b]);
+        });
+
+        pieces.push({pid, ranges});
+      });
+    }
+    card.__yrPieces = pieces;
+    return pieces;
   }
 
-  function matchesRulesOnScenarios(scs){
-    if(!stRules.length) return true;
-    if(!scs.length) return false;
-
-    return scs.some(sc => {
-      for(const r of stRules){
-        const val = sc[r.k] || 0;
-        if(r.mode === 'include'){
-          if(!rulePasses(val, r)) return false;
-        } else {
-          // exclude
-          if(rulePasses(val, r)) return false;
-        }
-      }
-      return true;
-    });
+  // -------------------------
+  // Matching logic
+  // -------------------------
+  function ruleOk(val, rule){
+    const n = rule.n;
+    const cmp = rule.cmp;
+    if(rule.mode === 'include'){
+      if(cmp === 'eq') return (val === n);
+      return (val >= n);
+    } else { // exclude
+      if(cmp === 'eq') return (val !== n);
+      return (val < n);
+    }
   }
 
+  // Returns {ok:boolean, matchPids:Set}
   function matchesSearchTool(card){
-    const scs = parseScenarios(card);
-    return matchesRulesOnScenarios(scs);
+    if(!stRules.length) return {ok:true, matchPids:new Set()};
+    const pieces = parseSearchToolPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
+
+    const matchPids = new Set();
+
+    for(const p of pieces){
+      const scs = p.scenarios || [];
+      if(!scs.length) continue;
+
+      const okPiece = scs.some(sc => {
+        for(const r of stRules){
+          const val = sc[r.k] || 0;
+          if(!ruleOk(val, r)) return false;
+        }
+        return true;
+      });
+
+      if(okPiece){
+        matchPids.add(p.pid);
+      }
+    }
+
+    return {ok: matchPids.size > 0, matchPids};
   }
 
-  // Populate Music/Source filters
+  function overlapsYearRange(rmin, rmax, fromY, toY){
+    if(fromY !== null && rmax < fromY) return false;
+    if(toY   !== null && rmin > toY)   return false;
+    return true;
+  }
+
+  // Returns {ok:boolean, matchPids:Set}
+  function matchesYearFilter(card){
+    const fromY = parseIntSafe(yearFrom.value);
+    const toY   = parseIntSafe(yearTo.value);
+    if(fromY === null && toY === null) return {ok:true, matchPids:new Set()};
+
+    const pieces = parseYearRangesPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
+
+    const matchPids = new Set();
+
+    for(const p of pieces){
+      const ranges = p.ranges || [];
+      if(!ranges.length) continue;
+
+      const okPiece = ranges.some(([a,b]) => overlapsYearRange(a,b, fromY, toY));
+      if(okPiece) matchPids.add(p.pid);
+    }
+
+    return {ok: matchPids.size > 0, matchPids};
+  }
+
+  function applyHighlight(card, matchPids){
+    // highlight lines in collections (subpieces)
+    const lines = card.querySelectorAll('.subpiece-line[data-pid]');
+    if(!lines.length) return;
+
+    let count = 0;
+    lines.forEach(ln => {
+      const pid = ln.dataset.pid || '';
+      const hit = matchPids && matchPids.has(pid);
+      ln.classList.toggle('match', !!hit);
+      if(hit) count++;
+    });
+
+    const badge = card.querySelector('.subpieces-matchcount');
+    if(badge){
+      if(matchPids && matchPids.size){
+        badge.textContent = `• ${count} match${count===1?'':'es'}`;
+      } else {
+        badge.textContent = '';
+      }
+    }
+  }
+
+  // -------------------------
+  // Dropdown sets for music/source
+  // -------------------------
   const musicSet = new Set();
   const sourceSet = new Set();
   cards.forEach(card => {
@@ -1017,6 +1231,9 @@ index_template = """<!doctype html>
     const o=document.createElement('option'); o.value=v; o.textContent=v; sourceFilter.appendChild(o);
   });
 
+  // -------------------------
+  // Main filter
+  // -------------------------
   function applyFilters() {
     const q  = normalize(searchInput.value);
     const qi = normalize(instrInput.value);
@@ -1036,42 +1253,41 @@ index_template = """<!doctype html>
       if (mt && !mts.includes(mt)) ok = false;
       if (st && !sts.includes(st)) ok = false;
 
-      // Collection intelligent Search Tool mode
-      if(ok && stRules.length){
-        const subLines = Array.from(card.querySelectorAll('.subpiece-line[data-stool-piece]'));
-        if(subLines.length){
-          let matchCount = 0;
-          subLines.forEach(line => {
-            const scs = parseScenariosFromBlob(line.dataset.stoolPiece || '');
-            const okLine = matchesRulesOnScenarios(scs);
-            line.style.display = okLine ? '' : 'none';
-            if(okLine) matchCount++;
-          });
+      // Search Tool (collection intelligent)
+      let stMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        stMatch = matchesSearchTool(card);
+        if(!stMatch.ok) ok = false;
+      }
 
-          if(card.__stMatchTag){
-            card.__stMatchTag.textContent = `${matchCount}/${subLines.length} match`;
-            card.__stMatchTag.style.display = '';
-          }
+      // Year filter (collection intelligent)
+      let yrMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        yrMatch = matchesYearFilter(card);
+        if(!yrMatch.ok) ok = false;
+      }
 
-          if(matchCount === 0) ok = false;
-        } else {
-          // non-collection cards: evaluate card-level scenarios
-          if(!matchesSearchTool(card)) ok = false;
-          if(card.__stMatchTag){
-            card.__stMatchTag.style.display = 'none';
-          }
-        }
+      // Apply highlight: intersection of matches when both filters active
+      // If only one active, use that set. If none active, clear.
+      const stActiveOn = stRules.length > 0;
+      const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
+
+      let highlightSet = null;
+      if(stActiveOn && yrActiveOn){
+        highlightSet = new Set();
+        stMatch.matchPids.forEach(pid => { if(yrMatch.matchPids.has(pid)) highlightSet.add(pid); });
+      } else if(stActiveOn){
+        highlightSet = stMatch.matchPids;
+      } else if(yrActiveOn){
+        highlightSet = yrMatch.matchPids;
       } else {
-        // No Search Tool rules: reset subpiece visibility + hide match tag
-        const subLines = Array.from(card.querySelectorAll('.subpiece-line[data-stool-piece]'));
-        subLines.forEach(line => line.style.display = '');
-        if(card.__stMatchTag){
-          card.__stMatchTag.style.display = 'none';
-        }
+        highlightSet = new Set();
       }
 
       card.style.display = ok ? '' : 'none';
       if (ok) visible++;
+
+      applyHighlight(card, highlightSet);
     });
 
     noResults.style.display = visible ? 'none' : '';
@@ -1079,6 +1295,8 @@ index_template = """<!doctype html>
 
   searchInput.addEventListener('input', applyFilters);
   instrInput.addEventListener('input', applyFilters);
+  yearFrom.addEventListener('input', applyFilters);
+  yearTo.addEventListener('input', applyFilters);
   musicFilter.addEventListener('change', applyFilters);
   sourceFilter.addEventListener('change', applyFilters);
 </script>
@@ -1110,6 +1328,7 @@ detail_template = """<!doctype html>
 
     @@INSTR@@
     <div class="piece-meta">@@META@@</div>
+    @@RISM_DRAWER@@
     @@BIBLIO@@
     @@NOTE@@
     @@ORG@@
@@ -1121,6 +1340,9 @@ detail_template = """<!doctype html>
 </html>
 """
 
+# =========================
+# MAIN
+# =========================
 def main():
     # Clean output dir
     if OUT_DIR.exists():
@@ -1149,6 +1371,7 @@ def main():
     df["__group"] = df["ZINKNET NO."].apply(group_id)
     df_sorted = df.sort_values("__sort_key").reset_index(drop=True)
 
+    # Groups
     groups = {}
     for _, row in df_sorted.iterrows():
         zid = clean_str(get_col(row, "ZINKNET NO."))
@@ -1156,12 +1379,11 @@ def main():
             continue
         gid = row["__group"]
         groups.setdefault(gid, []).append(zid)
-
     for gid, ids in groups.items():
         ids.sort(key=parse_zinknet)
-
     group_sizes = {gid: len(ids) for gid, ids in groups.items()}
 
+    # Records
     records = {}
     for _, row in df_sorted.iterrows():
         zid = clean_str(get_col(row, "ZINKNET NO."))
@@ -1190,7 +1412,14 @@ def main():
             "note_raw": clean_str(get_col(row, "Note")),
             "bibliography_raw": clean_str(get_col(row, "Bibliography")),
             "organology_raw": clean_str(get_col(row, "Organology")),
+            # Search Tool
             "search_tool_raw": clean_str(get_col(row, "Search Tool")),
+            # NEW: RISM text fields (no API needed)
+            "rism_holdings_raw": clean_str(get_col(row, "RISM Holdings")),
+            "rism_date_raw": clean_str(get_col(row, "RISM Date")),
+            # NEW: RISM numeric bounds (filter only, not displayed)
+            "rism_earliest_year_raw": clean_numberish(get_col(row, "RISM Earliest Year")),
+            "rism_latest_year_raw": clean_numberish(get_col(row, "RISM Latest Year")),
         }
 
         lib_raw = get_col(row, "Library-ies (public)")
@@ -1213,16 +1442,20 @@ def main():
         rec["note"] = escape_textnode(rec["note_raw"])
         rec["organology"] = escape_textnode(rec["organology_raw"])
 
-        # Search Tool scenarios (per piece)
+        # Search Tool scenarios
         rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
+
+        # Years parsed (filter only)
+        rec["year_min"] = parse_int_safe(rec["rism_earliest_year_raw"])
+        rec["year_max"] = parse_int_safe(rec["rism_latest_year_raw"])
 
         records[zid] = rec
 
-    # Concordances ids
+    # concordances ids
     for rec in records.values():
         rec["concordances_ids"] = [cid for cid in parse_conc_ids(rec["concordances_raw"]) if cid in records]
 
-    # Virtual collections
+    # virtual collections
     virtual_headers = set()
     for gid, ids in groups.items():
         has_real_coll = any(records[z]["indiv_coll"] == "Coll." for z in ids if z in records)
@@ -1247,9 +1480,15 @@ def main():
                 "concordances_ids": [],
                 "search_tool_raw": "",
                 "search_scenarios": [],
+                "rism_holdings_raw": "",
+                "rism_date_raw": "",
+                "rism_earliest_year_raw": "",
+                "rism_latest_year_raw": "",
+                "year_min": None,
+                "year_max": None,
             }
 
-    # Global instrument index for dropdown + frequency
+    # Build global instrument index + frequency (pieces where it can appear)
     all_instr = set()
     instr_freq = {}
     for rec in records.values():
@@ -1261,7 +1500,6 @@ def main():
                 present.add(k)
         for k in present:
             instr_freq[k] = instr_freq.get(k, 0) + 1
-
     all_instr_sorted = sorted(all_instr, key=lambda x: x.lower())
     search_tool_js = json.dumps(
         [{"k": k, "n": int(instr_freq.get(k, 0))} for k in all_instr_sorted],
@@ -1286,6 +1524,7 @@ def main():
         # tags (dedupe only inside this tag-row)
         used_links_tags = set()
         tags_html = []
+
         if hrec["music_type_raw"]:
             tags_html.append(f'<span class="tag tag-type">{escape_textnode(hrec["music_type_raw"])}</span>')
         if hrec["source_type_raw"]:
@@ -1299,6 +1538,14 @@ def main():
         if hrec["concordances_ids"]:
             n = len(hrec["concordances_ids"])
             tags_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
+
+        # NEW: RISM date chip on index
+        rism_dates = unique_nonempty(records[z].get("rism_date_raw", "") for z in ids if z in records)
+        if not is_virtual_collection:
+            if len(rism_dates) == 1:
+                tags_html.append(f'<span class="tag tag-rism">RISM date: {escape_textnode(rism_dates[0])}</span>')
+            elif len(rism_dates) > 1:
+                tags_html.append(f'<span class="tag tag-rism">RISM date: multiple</span>')
 
         if not is_virtual_collection:
             chip = rism_chip_self(hrec, used_links_tags)
@@ -1349,18 +1596,9 @@ def main():
                 used_links_line = set()
                 sub_rism = rism_chip_self(r, used_links_line)
 
-                # per-piece Search Tool scenarios blob
-                seen_sc_piece = set()
-                scenario_keys_piece = []
-                for sc in (r.get("search_scenarios") or []):
-                    key = "|".join(f"{k}={v}" for k, v in sorted(sc.items()))
-                    if key and key not in seen_sc_piece:
-                        seen_sc_piece.add(key)
-                        scenario_keys_piece.append(key)
-                stool_blob_piece = "||".join(scenario_keys_piece)
-
+                # NEW: add data-pid for highlight
                 sub_lines.append(f"""
-      <div class="subpiece-line" data-stool-piece="{escape_attr(stool_blob_piece)}">
+      <div class="subpiece-line" data-pid="{escape_attr(pid)}">
         <div><span class="subpiece-id">{escape_textnode(pid)} — {r['title'] or '(Untitled)'}</span></div>
         <div class="subpiece-meta">{r['composer'] or ''}</div>
         <div class="subpiece-meta">{instr_short_disp}</div>
@@ -1373,14 +1611,14 @@ def main():
             if sub_lines:
                 sub_block = f"""
       <div class="subpieces">
-        <div class="subpieces-title">Contents</div>
+        <div class="subpieces-title">Contents <span class="subpieces-matchcount"></span></div>
         {''.join(sub_lines)}
       </div>"""
 
         title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
         title_part = f" — {title_html}" if title_html else ""
 
-        # dataset attributes for filtering
+        # dataset attributes for filtering (full text)
         search_blob_parts = []
         for z in ids:
             rr = records[z]
@@ -1390,6 +1628,9 @@ def main():
                 rr["library_raw"], rr["shelfmark_raw"],
                 rr["music_type_raw"], rr["source_type_raw"],
                 rr["note_raw"], rr["organology_raw"],
+                # NEW: RISM text fields indexable
+                rr.get("rism_date_raw",""),
+                rr.get("rism_holdings_raw",""),
             ])
         search_blob = " ".join([p for p in search_blob_parts if p]).replace("\n", " ")
         music_types_set = sorted({records[z]["music_type_raw"] for z in ids if records[z]["music_type_raw"]})
@@ -1399,17 +1640,34 @@ def main():
             for z in ids
         ).replace("\n", " ")
 
-        # card-level Search Tool scenarios blob: union across pieces (used for non-collection entries)
-        scenario_keys = []
-        seen_sc = set()
+        # Search Tool scenarios per piece (collection intelligent)
+        # format: pid@@sc1||sc2##pid@@...
+        piece_chunks = []
         for z in ids:
             rr = records[z]
-            for sc in (rr.get("search_scenarios") or []):
+            scs = rr.get("search_scenarios") or []
+            sc_keys = []
+            seen_sc = set()
+            for sc in scs:
                 key = "|".join(f"{k}={v}" for k, v in sorted(sc.items()))
                 if key and key not in seen_sc:
                     seen_sc.add(key)
-                    scenario_keys.append(key)
-        stool_blob = "||".join(scenario_keys)
+                    sc_keys.append(key)
+            piece_chunks.append(f"{z}@@{'||'.join(sc_keys)}")
+        stool_pieces_blob = "##".join(piece_chunks)
+
+        # Year ranges per piece (collection intelligent)
+        # format: pid@@min:max||min:max##pid@@...
+        yr_chunks = []
+        for z in ids:
+            rr = records[z]
+            ymin = rr.get("year_min", None)
+            ymax = rr.get("year_max", None)
+            if ymin is None or ymax is None:
+                yr_chunks.append(f"{z}@@")
+            else:
+                yr_chunks.append(f"{z}@@{ymin}:{ymax}")
+        yr_pieces_blob = "##".join(yr_chunks)
 
         open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
 
@@ -1419,7 +1677,8 @@ def main():
       data-music-types="{escape_attr('||'.join(music_types_set))}"
       data-source-types="{escape_attr('||'.join(source_types_set))}"
       data-instr="{escape_attr(instr_blob)}"
-      data-stool="{escape_attr(stool_blob)}">
+      data-stool-pieces="{escape_attr(stool_pieces_blob)}"
+      data-yr-pieces="{escape_attr(yr_pieces_blob)}">
       <summary>
         <div class="entry-main">
           <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
@@ -1451,7 +1710,7 @@ def main():
     # DETAIL PAGES
     # =========================
     for zid, rec in records.items():
-        used_links_page = set()
+        used_links_page = set()  # no duplicate RISM link anywhere on the page
 
         gid = rec["group"]
         ids_in_group = groups.get(gid, [zid])
@@ -1467,6 +1726,7 @@ def main():
             breadcrumb_extra = f' &nbsp;›&nbsp; <a href="piece-{parent_id.replace("/","-")}.html" target="_blank" rel="noopener">Collection {escape_textnode(parent_id)}</a>'
             parent_btn = f'<div style="margin:8px 0 12px;"><a class="tag tag-count" href="piece-{parent_id.replace("/","-")}.html" target="_blank" rel="noopener">Open collection</a></div>'
 
+        # Tags: type/source + concordances + (RISM date) + (RISM self + collection)
         tags = []
         if rec["music_type_raw"]:
             tags.append(f'<span class="tag tag-type">{escape_textnode(rec["music_type_raw"])}</span>')
@@ -1475,6 +1735,10 @@ def main():
         if rec["concordances_ids"]:
             n = len(rec["concordances_ids"])
             tags.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
+
+        # NEW: RISM date chip (editorial text)
+        if rec.get("rism_date_raw",""):
+            tags.append(f'<span class="tag tag-rism">RISM date: {escape_textnode(rec["rism_date_raw"])}</span>')
 
         self_link = norm_url(rec.get("rism_link_raw",""))
         coll_link = norm_url(parent_rec.get("rism_link_raw","")) if parent_rec else ""
@@ -1511,6 +1775,48 @@ def main():
 
         meta_html = "".join(meta_bits)
 
+        # NEW: RISM drawer (variant B2: no earliest/latest visible)
+        rism_drawer = ""
+        rism_date = clean_str(rec.get("rism_date_raw",""))
+        rism_holdings = clean_str(rec.get("rism_holdings_raw",""))
+        rism_holdings_count = len(holdings_lines(rism_holdings))
+
+        if rism_date or rism_holdings:
+            open_attr = " open" if rism_holdings else ""
+            pills = []
+            if rism_date:
+                pills.append(f'<span class="pill">Date: {escape_textnode(rism_date)}</span>')
+            if rism_holdings_count:
+                pills.append(f'<span class="pill" style="opacity:.9;">Holdings: {rism_holdings_count}</span>')
+            pills_html = "".join(pills)
+
+            holdings_html = holdings_list_html(rism_holdings)
+            if holdings_html:
+                holdings_html = f"""
+          <div>
+            <div class="rism-hint" style="margin-bottom:6px;">RISM Holdings (one line per institution):</div>
+            {holdings_html}
+          </div>"""
+
+            rism_drawer = f"""
+    <details class="rism"{open_attr}>
+      <summary>
+        <div class="rism-left">
+          <span class="rism-title">RISM data</span>
+          <div class="rism-mini">{pills_html}</div>
+        </div>
+        <span class="tag tag-rism" style="opacity:.85;">open/close</span>
+      </summary>
+      <div class="rism-body">
+        <div class="rism-hint">RISM has priority over manual data when overlapping.</div>
+        <div class="rism-kv">
+          <div class="k">RISM Date (text)</div><div class="v">{escape_textnode(rism_date) if rism_date else ''}</div>
+        </div>
+        {holdings_html}
+      </div>
+    </details>
+"""
+
         biblio_html = f'<div class="piece-notes"><div class="label">Bibliography:</div><div class="value">{rec["bibliography"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["bibliography"]) else ""
         note_html = f'<div class="piece-notes"><div class="label">Note:</div><div class="value">{rec["note"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["note"]) else ""
         org_html = f'<div class="piece-notes"><div class="label">Organology:</div><div class="value">{rec["organology"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["organology"]) else ""
@@ -1523,9 +1829,9 @@ def main():
                 if not cr:
                     continue
                 mt = cr["music_type_raw"]
-                stt = cr["source_type_raw"]
+                st = cr["source_type_raw"]
                 mt_tag = f'<span class="tag tag-type">{escape_textnode(mt)}</span>' if mt else ""
-                st_tag = f'<span class="tag tag-source">{escape_textnode(stt)}</span>' if stt else ""
+                st_tag = f'<span class="tag tag-source">{escape_textnode(st)}</span>' if st else ""
                 rchip = rism_chip_self(cr, used_links_page)
                 cards_html.append(f"""
       <div class="conc-card">
@@ -1601,6 +1907,7 @@ def main():
             .replace("@@TAGS@@", tags_html)
             .replace("@@INSTR@@", instr_block)
             .replace("@@META@@", meta_html)
+            .replace("@@RISM_DRAWER@@", rism_drawer)
             .replace("@@BIBLIO@@", biblio_html)
             .replace("@@NOTE@@", note_html)
             .replace("@@ORG@@", org_html)
