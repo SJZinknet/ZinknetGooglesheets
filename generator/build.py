@@ -1543,9 +1543,9 @@ def main():
         rism_dates = unique_nonempty(records[z].get("rism_date_raw", "") for z in ids if z in records)
         if not is_virtual_collection:
             if len(rism_dates) == 1:
-                tags_html.append(f'<span class="tag tag-rism">RISM date: {escape_textnode(rism_dates[0])}</span>')
+       tags_html.append(f'<span class="tag tag-rism">{escape_textnode(rism_dates[0])}</span>')
             elif len(rism_dates) > 1:
-                tags_html.append(f'<span class="tag tag-rism">RISM date: multiple</span>')
+               tags_html.append(f'<span class="tag tag-rism">multiple</span>')
 
         if not is_virtual_collection:
             chip = rism_chip_self(hrec, used_links_tags)
@@ -1738,7 +1738,7 @@ def main():
 
         # NEW: RISM date chip (editorial text)
         if rec.get("rism_date_raw",""):
-            tags.append(f'<span class="tag tag-rism">RISM date: {escape_textnode(rec["rism_date_raw"])}</span>')
+           tags.append(f'<span class="tag tag-rism">{escape_textnode(rec["rism_date_raw"])}</span>')
 
         self_link = norm_url(rec.get("rism_link_raw",""))
         coll_link = norm_url(parent_rec.get("rism_link_raw","")) if parent_rec else ""
