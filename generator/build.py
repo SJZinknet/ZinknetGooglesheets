@@ -1525,28 +1525,37 @@ def main():
         used_links_tags = set()
         tags_html = []
 
-        if hrec["music_type_raw"]:
+        # 1) Music type + source type
+        if hrec.get("music_type_raw"):
             tags_html.append(f'<span class="tag tag-type">{escape_textnode(hrec["music_type_raw"])}</span>')
-        if hrec["source_type_raw"]:
+        if hrec.get("source_type_raw"):
             tags_html.append(f'<span class="tag tag-source">{escape_textnode(hrec["source_type_raw"])}</span>')
 
+        # 2) Collection count tag
         if coll_id or is_virtual_collection:
             nb_pieces = gcount_total - 1 if coll_id else gcount_total
             nb_pieces = max(nb_pieces, 0)
             tags_html.append(f'<span class="tag tag-count">{nb_pieces} piece{"s" if nb_pieces != 1 else ""}</span>')
 
-        if hrec["concordances_ids"]:
+        # 3) Concordances tag
+        if hrec.get("concordances_ids"):
             n = len(hrec["concordances_ids"])
-            tags_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
+            tags_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n != 1 else ""}</span>')
 
-        # NEW: RISM date chip on index
-        rism_dates = unique_nonempty(records[z].get("rism_date_raw", "") for z in ids if z in records)
-        if not is_virtual_collection:
-            if len(rism_dates) == 1:
-       tags_html.append(f'<span class="tag tag-rism">{escape_textnode(rism_dates[0])}</span>')
-            elif len(rism_dates) > 1:
-               tags_html.append(f'<span class="tag tag-rism">multiple</span>')
+        # 4) NEW: RISM date chip (NO "RISM date:" label)
+        # We compute it safely across the whole group (ids), so no undefined variable.
+        rism_dates = sorted({
+            clean_str(records[z].get("rism_date_raw", "")).strip()
+            for z in ids
+            if clean_str(records[z].get("rism_date_raw", "")).strip()
+        })
 
+        if len(rism_dates) == 1:
+            tags_html.append(f'<span class="tag tag-rism">{escape_textnode(rism_dates[0])}</span>')
+        elif len(rism_dates) >= 2:
+            tags_html.append(f'<span class="tag tag-rism">multiple</span>')
+
+        # 5) RISM Online chip (kept as before, only for non-virtual collections)
         if not is_virtual_collection:
             chip = rism_chip_self(hrec, used_links_tags)
             if chip:
