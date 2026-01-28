@@ -76,7 +76,7 @@ h1{
   width:auto;
   filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
 }
-.hem-logo{ height: 58px; }
+.hem-logo{ height: 58px; }  /* HEM larger only */
 .rism-logo{ height: 30px; }
 
 .collab-line{
@@ -134,7 +134,7 @@ h1{
   text-transform:uppercase; letter-spacing:.14em;
   color:var(--muted); margin-bottom:6px;
 }
-.filters input[type="text"] {
+.filters input[type="text"], .filters input[type="number"] {
   width:100%; border-radius:999px;
   border:1px solid var(--border-subtle);
   background:#fafaff;
@@ -149,7 +149,8 @@ h1{
   outline:none; cursor:pointer;
 }
 .filters-row { display:flex; flex-direction:column; gap:10px; }
-.filter-inline { display:flex; gap:8px; flex-wrap:wrap; }
+.filter-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.filter-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
 
 .entries { max-height: calc(100vh - 170px); overflow:auto; padding-right:4px; }
 
@@ -186,6 +187,7 @@ summary::-webkit-details-marker { display:none; }
 .tag-count { background: var(--green-collection-bg); border-color: var(--green-collection); color: var(--green-collection); font-weight:650; }
 .tag-conc { border:1px solid var(--border-subtle); background:#ffffff; }
 
+/* RISM mini-chip */
 .tag-rism{
   border-color: var(--violet-border);
   background: var(--violet-bg);
@@ -194,6 +196,8 @@ summary::-webkit-details-marker { display:none; }
   letter-spacing:.12em;
   font-weight:650;
 }
+
+/* Elegant duo wrapper */
 .rism-duo{
   display:inline-flex;
   align-items:center;
@@ -207,6 +211,8 @@ summary::-webkit-details-marker { display:none; }
   background: rgba(76,29,149,0.35);
   border-radius:1px;
 }
+
+/* See RISM (violet, harmonized) */
 .see-rism-tag {
   display:inline-flex; align-items:center; margin-left:6px;
   padding:2px 6px; border-radius:999px;
@@ -252,12 +258,20 @@ dd.meta-value { margin:0; }
   border:1px dashed var(--border-subtle);
   padding:7px 9px 7px; background:#f2f3ff;
 }
-.subpieces-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:4px; }
+.subpieces-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:4px; display:flex; gap:8px; align-items:center; }
+.subpieces-matchcount{ font-size:.74rem; color:var(--violet-text); opacity:.85; }
 .subpiece-line {
   padding:6px 0; border-top:1px solid #d8ddf5;
   font-size:0.88rem; display:flex; flex-direction:column; gap:2px;
 }
 .subpiece-line:first-of-type { border-top:none; }
+.subpiece-line.match {
+  border-top:1px solid rgba(139,92,246,0.35);
+  background: rgba(139,92,246,0.07);
+  border-radius:10px;
+  padding-left:8px;
+  padding-right:8px;
+}
 .subpiece-id { font-weight:600; color:#020617; }
 .subpiece-meta { font-size:0.8rem; color:var(--muted); }
 .subpiece-link { font-size:0.78rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -320,3 +334,59 @@ dd.meta-value { margin:0; }
 .sub-entry-body { border-top:1px solid #dde1f0; margin-top:6px; padding-top:6px; font-size:0.85rem; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
+
+/* NEW: RISM drawer on detail pages (variant B) */
+details.rism {
+  margin-top:14px;
+  border:1.5px solid rgba(139,92,246,0.35);
+  background: linear-gradient(180deg, rgba(139,92,246,0.08), rgba(255,255,255,0.95));
+  border-radius:18px;
+  padding: 10px 12px;
+}
+details.rism > summary{
+  cursor:pointer;
+  list-style:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+details.rism > summary::-webkit-details-marker{display:none}
+.rism-left{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.rism-title{
+  font-size:.78rem; text-transform:uppercase; letter-spacing:.14em;
+  color:var(--violet-text);
+  font-weight:800;
+}
+.rism-mini{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+.rism-mini .pill{
+  font-size:.74rem;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid rgba(139,92,246,0.45);
+  background: rgba(139,92,246,0.10);
+  color: var(--violet-text);
+  white-space:nowrap;
+}
+.rism-body{
+  margin-top:10px;
+  border-top:1px solid rgba(139,92,246,0.22);
+  padding-top:10px;
+  display:grid;
+  grid-template-columns: minmax(0,1fr);
+  gap:10px;
+}
+.rism-kv{
+  display:grid;
+  grid-template-columns: minmax(0,140px) minmax(0,1fr);
+  gap:6px 10px;
+  font-size:.88rem;
+}
+.rism-kv .k{color:var(--muted); font-weight:600; font-size:.80rem}
+.rism-kv .v{color:#111827}
+.rism-holdings{
+  margin:0; padding-left:16px;
+  font-size:.88rem; line-height:1.35;
+  max-height: 260px; overflow:auto;
+}
+.rism-hint{font-size:.80rem; color:var(--muted);}
