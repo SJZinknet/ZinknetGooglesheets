@@ -1542,24 +1542,29 @@ def main():
             n = len(hrec["concordances_ids"])
             tags_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n != 1 else ""}</span>')
 
-        # 4) NEW: RISM date chip (NO "RISM date:" label)
-        # We compute it safely across the whole group (ids), so no undefined variable.
+        # 4) RISM Online chip (kept as before, only for non-virtual collections)
+        if not is_virtual_collection:
+            chip = rism_chip_self(hrec, used_links_tags)
+            if chip:
+                tags_html.append(chip)
+
+        # 5) NEW: RISM date chip moved next to composer line (NOT in tags)
+        # Compute safely across group (ids). Show nothing if no date.
         rism_dates = sorted({
             clean_str(records[z].get("rism_date_raw", "")).strip()
             for z in ids
             if clean_str(records[z].get("rism_date_raw", "")).strip()
         })
 
+        date_chip = ""
         if len(rism_dates) == 1:
-            tags_html.append(f'<span class="tag tag-rism">{escape_textnode(rism_dates[0])}</span>')
+            date_chip = f'<span class="tag tag-rism" style="margin-left:6px;">{escape_textnode(rism_dates[0])}</span>'
         elif len(rism_dates) >= 2:
-            tags_html.append(f'<span class="tag tag-rism">multiple</span>')
+            date_chip = f'<span class="tag tag-rism" style="margin-left:6px;">multiple</span>'
 
-        # 5) RISM Online chip (kept as before, only for non-virtual collections)
-        if not is_virtual_collection:
-            chip = rism_chip_self(hrec, used_links_tags)
-            if chip:
-                tags_html.append(chip)
+        # Build composer line: keep the line even if empty, but show chip only if it exists
+        composer_txt = hrec.get("composer", "") or ""
+        composer_line = f'{composer_txt}{date_chip}'
 
         display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
 
@@ -1691,7 +1696,7 @@ def main():
       <summary>
         <div class="entry-main">
           <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
-          <div class="entry-composer">{hrec['composer'] or ''}</div>
+<div class="entry-composer">{composer_line}</div>
           <div class="entry-tags">{''.join(tags_html)}</div>
         </div>
         <div class="entry-arrow">›</div>
