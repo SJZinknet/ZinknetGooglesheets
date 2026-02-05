@@ -1416,8 +1416,19 @@ def main():
     )
 
     # =========================
-    # INDEX BUILD
+    # INDEX BUILD  (Composer smart-collection)
+    # - Adds: data-composers (all composers in the group)
+    # - Adds: data-composer-raw on each subpiece line
+    # - JS: exact composer filter keeps collections if any subpiece matches + filters Contents
     # =========================
+
+    # Master list for composer dropdown (raw strings as in the sheet: "Last, First ...")
+    composer_master = sorted(
+        {r.get("composer_raw", "") for r in records.values() if r.get("composer_raw", "")},
+        key=lambda x: x.lower()
+    )
+    composers_js = json.dumps(composer_master, ensure_ascii=False)
+
     group_html_parts = []
     sorted_group_ids = sorted(groups.keys(), key=lambda g: parse_zinknet(g))
 
@@ -1430,6 +1441,7 @@ def main():
         hrec = records[header_id]
         gcount_total = len(ids)
 
+        # tags (dedupe only inside this tag-row)
         used_links_tags = set()
         tags_html = []
         if hrec["music_type_raw"]:
@@ -1452,13 +1464,14 @@ def main():
                 tags_html.append(chip)
 
         display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
+
+        # Collections: no catalog instrumentation in main view
         instr_block = build_instr_block_for_record(hrec, include_catalogs=not (coll_id or is_virtual_collection))
 
-        # Composer line: always present (even if empty), with optional RISM date chip
-        date_chip = f'<span class="tag tag-rismdate">{hrec["rism_date"]}</span>' if hrec.get("rism_date") else ""
-        composer_line = f'{hrec["composer"] or ""}{date_chip}'
-
         meta_rows = []
+        if (not is_virtual_collection) and hrec["composer"]:
+            meta_rows.append(f'<dt class="meta-label">Composer</dt><dd class="meta-value">{hrec["composer"]}</dd>')
+
         lib_val = hrec["library"]
         shelf_val = hrec["shelfmark"]
         if hrec["see_rism"]:
@@ -1474,7 +1487,7 @@ def main():
 
         meta_html = ('<dl class="meta">' + "\n".join(meta_rows) + "</dl>") if meta_rows else ""
 
-        # Contents block (collections)
+        # contents
         sub_block = ""
         if coll_id or is_virtual_collection:
             sub_lines = []
@@ -1494,37 +1507,8 @@ def main():
                 used_links_line = set()
                 sub_rism = rism_chip_self(r, used_links_line)
 
-                # Per-line datasets for smart collection mode
-                line_search = " ".join([p for p in [
-                    pid, r["composer_raw"], r["title_raw"],
-                    r["instr_rism_main_raw"], r["instr_rism_alt_raw"], r["instr_catalogs_raw"],
-                    r["library_raw"], r["shelfmark_raw"],
-                    r["music_type_raw"], r["source_type_raw"],
-                    r["note_raw"], r["organology_raw"],
-                ] if p]).replace("\n", " ")
-
-                line_instr = " ".join([
-                    (r["instr_rism_main_raw"] + " " + r["instr_rism_alt_raw"] + " " + r["instr_catalogs_raw"]).strip()
-                ]).replace("\n", " ")
-
-                # Stool scenarios for the piece (not union)
-                line_scen = []
-                seen_sc = set()
-                for sc in (r.get("search_scenarios") or []):
-                    key = "|".join(f"{k}={v}" for k, v in sorted(sc.items()))
-                    if key and key not in seen_sc:
-                        seen_sc.add(key)
-                        line_scen.append(key)
-                line_stool = "||".join(line_scen)
-
                 sub_lines.append(f"""
-      <div class="subpiece-line"
-        data-search="{escape_attr(line_search)}"
-        data-composer-raw="{escape_attr(r.get('composer_raw',''))}"
-        data-music-types="{escape_attr(r.get('music_type_raw',''))}"
-        data-source-types="{escape_attr(r.get('source_type_raw',''))}"
-        data-instr="{escape_attr(line_instr)}"
-        data-stool="{escape_attr(line_stool)}">
+      <div class="subpiece-line" data-composer-raw="{escape_attr(r.get('composer_raw',''))}">
         <div><span class="subpiece-id">{escape_textnode(pid)} — {r['title'] or '(Untitled)'}</span></div>
         <div class="subpiece-meta">{r['composer'] or ''}</div>
         <div class="subpiece-meta">{instr_short_disp}</div>
@@ -1534,7 +1518,6 @@ def main():
         </div>
         {conc_tag}
       </div>""")
-
             if sub_lines:
                 sub_block = f"""
       <div class="subpieces">
@@ -1545,7 +1528,7 @@ def main():
         title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
         title_part = f" — {title_html}" if title_html else ""
 
-        # Dataset attributes for filtering (group-level)
+        # dataset attributes for filtering
         search_blob_parts = []
         for z in ids:
             rr = records[z]
@@ -1555,19 +1538,23 @@ def main():
                 rr["library_raw"], rr["shelfmark_raw"],
                 rr["music_type_raw"], rr["source_type_raw"],
                 rr["note_raw"], rr["organology_raw"],
-                rr.get("rism_date_raw",""),
             ])
         search_blob = " ".join([p for p in search_blob_parts if p]).replace("\n", " ")
-
         music_types_set = sorted({records[z]["music_type_raw"] for z in ids if records[z]["music_type_raw"]})
         source_types_set = sorted({records[z]["source_type_raw"] for z in ids if records[z]["source_type_raw"]})
-
         instr_blob = " ".join(
             ((records[z]["instr_rism_main_raw"] + " " + records[z]["instr_rism_alt_raw"] + " " + records[z]["instr_catalogs_raw"]).strip())
             for z in ids
         ).replace("\n", " ")
 
-        # Search Tool scenarios blob for the group: union of piece scenarios
+        # NEW: all composers in this group (for smart collection filtering)
+        composers_set = sorted(
+            {records[z].get("composer_raw", "") for z in ids if records[z].get("composer_raw", "")},
+            key=lambda x: x.lower()
+        )
+        composers_blob = "||".join(composers_set)
+
+        # Search Tool scenarios blob for this group (union across pieces)
         scenario_keys = []
         seen_sc = set()
         for z in ids:
@@ -1581,33 +1568,431 @@ def main():
 
         open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
 
-        # IMPORTANT: composer-raw is the header record raw (EXACT match)
         group_html_parts.append(f"""
-<details class="entry"
-  data-search="{escape_attr(search_blob)}"
-  data-composer-raw="{escape_attr(hrec.get('composer_raw',''))}"
-  data-music-types="{escape_attr('||'.join(music_types_set))}"
-  data-source-types="{escape_attr('||'.join(source_types_set))}"
-  data-instr="{escape_attr(instr_blob)}"
-  data-stool="{escape_attr(stool_blob)}">
-  <summary>
-    <div class="entry-main">
-      <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
-      <div class="entry-composer">{composer_line}</div>
-      <div class="entry-tags">{''.join(tags_html)}</div>
-    </div>
-    <div class="entry-arrow">›</div>
-  </summary>
-  <div class="entry-body">
-    {instr_block}
-    {meta_html}
-    {sub_block}
-    {open_link_html}
-  </div>
-</details>
-""")
+    <details class="entry"
+      data-search="{escape_attr(search_blob)}"
+      data-composers="{escape_attr(composers_blob)}"
+      data-music-types="{escape_attr('||'.join(music_types_set))}"
+      data-source-types="{escape_attr('||'.join(source_types_set))}"
+      data-instr="{escape_attr(instr_blob)}"
+      data-stool="{escape_attr(stool_blob)}">
+      <summary>
+        <div class="entry-main">
+          <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
+          <div class="entry-composer">{hrec['composer'] or ''}</div>
+          <div class="entry-tags">{''.join(tags_html)}</div>
+        </div>
+        <div class="entry-arrow">›</div>
+      </summary>
+      <div class="entry-body">
+        {instr_block}
+        {meta_html}
+        {sub_block}
+        {open_link_html}
+      </div>
+    </details>
+    """)
 
     entries_html = "\n".join(group_html_parts)
+
+    # (Local override is fine even if a global index_template exists)
+    index_template = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ZinkNET — Interactive catalogue</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+@@HEADER@@
+<main class="shell">
+  <div class="layout">
+    <section class="card">
+      <h2>Search & filters</h2>
+      <div class="filters">
+        <div class="filters-row">
+          <div>
+            <label for="searchInput">Global search</label>
+            <input id="searchInput" type="text" placeholder="Composer, title, number, library…" />
+          </div>
+
+          <!-- NEW: Composer finder (raw dropdown, token search; exact filter on selection) -->
+          <div>
+            <label for="composerInput">Composer (type to find, click to filter)</label>
+            <input id="composerInput" type="text" placeholder="Type: von, hessen, moritz…" autocomplete="off" />
+            <div id="composerDropdown" style="display:none; margin-top:6px; border:1px solid var(--border-subtle); background:#fff; border-radius:12px; overflow:hidden; max-height:240px; overflow-y:auto;"></div>
+            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+              <button id="composerClear" type="button" class="tag" style="cursor:pointer;">Clear composer</button>
+              <span id="composerActive" class="tag tag-conc" style="display:none;"></span>
+            </div>
+          </div>
+
+          <div>
+            <label for="instrInput">Search in instrumentations</label>
+            <input id="instrInput" type="text" placeholder="e.g. cnto, cornettino, trb…" />
+          </div>
+
+          <!-- Search Tool builder -->
+          <div>
+            <label>Instrumentation Search Builder</label>
+            <div class="filter-inline" style="gap:6px;">
+              <select id="stMode">
+                <option value="include">Include</option>
+                <option value="exclude">Exclude</option>
+              </select>
+
+              <select id="stInstr">
+                <option value="">Select instrument…</option>
+              </select>
+
+              <select id="stCmp">
+                <option value="atleast">≥</option>
+                <option value="exact">=</option>
+              </select>
+
+              <select id="stQty">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+              </select>
+
+              <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
+              <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
+            </div>
+            <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+          </div>
+
+          <div>
+            <label>Music type & source</label>
+            <div class="filter-inline">
+              <select id="musicFilter"><option value="">All music types</option></select>
+              <select id="sourceFilter"><option value="">All sources</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Catalogue</h2>
+      <div id="entries" class="entries">
+@@ENTRIES@@
+      </div>
+      <div id="noResults" class="no-results" style="display:none;">
+        No results for these filters.
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+  const searchInput = document.getElementById('searchInput');
+  const instrInput = document.getElementById('instrInput');
+  const musicFilter = document.getElementById('musicFilter');
+  const sourceFilter = document.getElementById('sourceFilter');
+  const entriesContainer = document.getElementById('entries');
+  const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
+  const noResults = document.getElementById('noResults');
+
+  function normalize(s){
+    return (s || '').toLowerCase();
+  }
+  function normFold(s){
+    // light diacritics fold (safe on modern browsers)
+    try { return (s || '').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,''); }
+    catch(e){ return (s || '').toLowerCase(); }
+  }
+
+  // -------------------------
+  // Composer dropdown (token search, exact filter on selection)
+  // -------------------------
+  const composerInput = document.getElementById('composerInput');
+  const composerDropdown = document.getElementById('composerDropdown');
+  const composerClear = document.getElementById('composerClear');
+  const composerActive = document.getElementById('composerActive');
+
+  const COMPOSERS = @@COMPOSERS@@;
+  const composerIndex = COMPOSERS.map(name => {
+    const low = normFold(name);
+    const tokens = low.replace(/[\\.,;:()\\[\\]{}<>\\/\\\\\\-_]+/g,' ').split(/\\s+/).filter(Boolean);
+    return { name, low, tokens };
+  });
+
+  let composerSelected = ""; // exact raw value, only set by clicking a suggestion
+
+  function renderComposerDropdown(){
+    const q = normFold(composerInput.value).trim();
+    if(!q){
+      composerDropdown.style.display = 'none';
+      composerDropdown.innerHTML = '';
+      return;
+    }
+    const terms = q.split(/\\s+/).filter(Boolean);
+    const matches = composerIndex.filter(e => {
+      return terms.every(t => e.low.includes(t) || e.tokens.some(tok => tok.includes(t)));
+    });
+
+    matches.sort((a,b) => {
+      const ai = a.low.indexOf(terms[0]);
+      const bi = b.low.indexOf(terms[0]);
+      if(ai !== bi) return ai - bi;
+      return a.low.localeCompare(b.low);
+    });
+
+    const top = matches.slice(0, 24);
+    composerDropdown.innerHTML = '';
+    top.forEach(e => {
+      const row = document.createElement('div');
+      row.textContent = e.name;
+      row.style.padding = '8px 10px';
+      row.style.cursor = 'pointer';
+      row.style.borderTop = '1px solid rgba(208,213,235,0.7)';
+      row.addEventListener('mouseenter', () => row.style.background = 'rgba(35,75,184,0.06)');
+      row.addEventListener('mouseleave', () => row.style.background = '#fff');
+      row.addEventListener('click', () => {
+        composerSelected = e.name;        // EXACT
+        composerInput.value = e.name;     // show raw label as stored
+        composerDropdown.style.display = 'none';
+        composerDropdown.innerHTML = '';
+        composerActive.style.display = '';
+        composerActive.textContent = 'Composer: ' + composerSelected + ' ×';
+        applyFilters();
+      });
+      composerDropdown.appendChild(row);
+    });
+
+    composerDropdown.style.display = top.length ? '' : 'none';
+  }
+
+  composerInput.addEventListener('input', () => {
+    // If user edits after selecting, we drop the exact filter (until they click again)
+    if(composerSelected && composerInput.value !== composerSelected){
+      composerSelected = "";
+      composerActive.style.display = 'none';
+      composerActive.textContent = '';
+      applyFilters();
+    }
+    renderComposerDropdown();
+  });
+
+  composerInput.addEventListener('blur', () => {
+    // allow click on dropdown (small delay)
+    setTimeout(() => { composerDropdown.style.display = 'none'; }, 180);
+  });
+
+  composerClear.addEventListener('click', () => {
+    composerSelected = "";
+    composerInput.value = "";
+    composerDropdown.style.display = 'none';
+    composerDropdown.innerHTML = '';
+    composerActive.style.display = 'none';
+    composerActive.textContent = '';
+    applyFilters();
+  });
+
+  composerActive.addEventListener('click', () => {
+    // clicking the chip clears
+    composerClear.click();
+  });
+
+  // -------------------------
+  // Search Tool builder
+  // -------------------------
+  const stMode  = document.getElementById('stMode');
+  const stInstr = document.getElementById('stInstr');
+  const stCmp   = document.getElementById('stCmp');
+  const stQty   = document.getElementById('stQty');
+  const stAdd   = document.getElementById('stAdd');
+  const stClear = document.getElementById('stClear');
+  const stActive = document.getElementById('stActive');
+
+  // injected by Python: [{k:"cnto", n:123}, ...]
+  const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
+  const stRules = []; // {mode:"include"|"exclude", k:"cnto", cmp:"atleast"|"exact", n:3}
+
+  SEARCH_TOOL_INSTRS.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.k;
+    opt.textContent = `${o.k} (${o.n})`;
+    stInstr.appendChild(opt);
+  });
+
+  function renderStRules(){
+    stActive.innerHTML = '';
+    stRules.forEach((r, idx) => {
+      const chip = document.createElement('span');
+      chip.className = 'tag tag-conc';
+      chip.style.cursor = 'pointer';
+      const sign = r.mode === 'include' ? '+' : '–';
+      const cmpSymbol = r.cmp === 'exact' ? '=' : '≥';
+      chip.textContent = `${sign} ${r.k} ${cmpSymbol} ${r.n}  ×`;
+      chip.title = 'Click to remove';
+      chip.addEventListener('click', () => {
+        stRules.splice(idx, 1);
+        renderStRules();
+        applyFilters();
+      });
+      stActive.appendChild(chip);
+    });
+  }
+
+  stAdd.addEventListener('click', () => {
+    const k = stInstr.value;
+    const n = parseInt(stQty.value || '1', 10);
+    const mode = stMode.value;
+    const cmp = stCmp.value;
+    if(!k) return;
+    stRules.push({mode, k, cmp, n});
+    renderStRules();
+    applyFilters();
+  });
+
+  stClear.addEventListener('click', () => {
+    stRules.length = 0;
+    renderStRules();
+    applyFilters();
+  });
+
+  function parseScenarios(card){
+    if(card.__stScenarios) return card.__stScenarios;
+    const raw = card.dataset.stool || '';
+    const scenarios = [];
+    if(raw){
+      raw.split('||').forEach(scStr => {
+        const sc = {};
+        if(!scStr) return;
+        scStr.split('|').forEach(pair => {
+          const parts = pair.split('=');
+          if(parts.length !== 2) return;
+          const k = parts[0];
+          const v = parts[1];
+          if(k && v) sc[k] = parseInt(v,10) || 0;
+        });
+        scenarios.push(sc);
+      });
+    }
+    card.__stScenarios = scenarios;
+    return scenarios;
+  }
+
+  function matchesSearchTool(card){
+    if(!stRules.length) return true;
+    const scs = parseScenarios(card);
+    if(!scs.length) return false;
+
+    return scs.some(sc => {
+      for(const r of stRules){
+        const val = sc[r.k] || 0;
+
+        // include
+        if(r.mode === 'include'){
+          if(r.cmp === 'exact'){
+            if(val !== r.n) return false;
+          }else{
+            if(val < r.n) return false;
+          }
+        }
+        // exclude
+        else{
+          if(r.cmp === 'exact'){
+            if(val === r.n) return false;
+          }else{
+            if(val >= r.n) return false;
+          }
+        }
+      }
+      return true;
+    });
+  }
+
+  // -------------------------
+  // Populate Music/Source filters
+  // -------------------------
+  const musicSet = new Set();
+  const sourceSet = new Set();
+  cards.forEach(card => {
+    (card.dataset.musicTypes || '').split('||').filter(Boolean).forEach(v => musicSet.add(v));
+    (card.dataset.sourceTypes || '').split('||').filter(Boolean).forEach(v => sourceSet.add(v));
+  });
+  Array.from(musicSet).sort().forEach(v => {
+    const o=document.createElement('option'); o.value=v; o.textContent=v; musicFilter.appendChild(o);
+  });
+  Array.from(sourceSet).sort().forEach(v => {
+    const o=document.createElement('option'); o.value=v; o.textContent=v; sourceFilter.appendChild(o);
+  });
+
+  // -------------------------
+  // Smart: if a composer is selected, filter Contents lines inside collections
+  // -------------------------
+  function filterCollectionContents(card){
+    const lines = Array.from(card.querySelectorAll('.subpiece-line'));
+    if(!lines.length) return;
+
+    if(!composerSelected){
+      lines.forEach(l => l.style.display = '');
+      return;
+    }
+    lines.forEach(l => {
+      const c = l.dataset.composerRaw || '';
+      l.style.display = (c === composerSelected) ? '' : 'none';
+    });
+  }
+
+  function applyFilters() {
+    const q  = normalize(searchInput.value);
+    const qi = normalize(instrInput.value);
+    const mt = musicFilter.value;
+    const st = sourceFilter.value;
+
+    let visible = 0;
+
+    cards.forEach(card => {
+      const text  = normalize(card.dataset.search);
+      const instr = normalize(card.dataset.instr);
+      const mts = (card.dataset.musicTypes || '').split('||').filter(Boolean);
+      const sts = (card.dataset.sourceTypes || '').split('||').filter(Boolean);
+
+      let ok = true;
+      if (q  && !text.includes(q)) ok = false;
+      if (qi && !instr.includes(qi)) ok = false;
+      if (mt && !mts.includes(mt)) ok = false;
+      if (st && !sts.includes(st)) ok = false;
+
+      // Search Tool builder
+      if (ok && !matchesSearchTool(card)) ok = false;
+
+      // Composer exact filter (SMART collections: checks all composers in group)
+      if(ok && composerSelected){
+        const clist = (card.dataset.composers || '').split('||').filter(Boolean);
+        if(!clist.includes(composerSelected)) ok = false;
+      }
+
+      card.style.display = ok ? '' : 'none';
+      if (ok){
+        visible++;
+        filterCollectionContents(card);
+      }
+    });
+
+    noResults.style.display = visible ? 'none' : '';
+  }
+
+  searchInput.addEventListener('input', applyFilters);
+  instrInput.addEventListener('input', applyFilters);
+  musicFilter.addEventListener('change', applyFilters);
+  sourceFilter.addEventListener('change', applyFilters);
+</script>
+</body>
+</html>
+"""
 
     (OUT_DIR / "index.html").write_text(
         index_template
