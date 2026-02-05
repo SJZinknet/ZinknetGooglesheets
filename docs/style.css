@@ -173,7 +173,16 @@ summary::-webkit-details-marker { display:none; }
 
 .entry-main { display:flex; flex-direction:column; gap:3px; }
 .entry-id { font-weight:650; font-size:0.96rem; color:#020617; }
-.entry-composer { font-size:0.85rem; color:var(--muted); }
+
+/* Composer line can now contain date chip too */
+.entry-composer {
+  font-size:0.85rem;
+  color:var(--muted);
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+}
 .entry-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; align-items:center; }
 
 .tag {
@@ -196,6 +205,16 @@ summary::-webkit-details-marker { display:none; }
   font-weight:650;
 }
 
+/* RISM date chip (no label, just the date) */
+.tag-rismdate{
+  border-color: var(--violet-border);
+  background: var(--violet-bg);
+  color: var(--violet-text);
+  letter-spacing:.04em;
+  font-weight:650;
+  text-transform:none;
+}
+
 /* Elegant duo wrapper */
 .rism-duo{
   display:inline-flex;
@@ -211,7 +230,7 @@ summary::-webkit-details-marker { display:none; }
   border-radius:1px;
 }
 
-/* See RISM (violet, harmonized) */
+/* See RISM */
 .see-rism-tag {
   display:inline-flex; align-items:center; margin-left:6px;
   padding:2px 6px; border-radius:999px;
@@ -263,6 +282,7 @@ dd.meta-value { margin:0; }
   font-size:0.88rem; display:flex; flex-direction:column; gap:2px;
 }
 .subpiece-line:first-of-type { border-top:none; }
+.subpiece-line.is-match { background: rgba(35,75,184,0.05); border-radius:10px; padding:6px 8px; }
 .subpiece-id { font-weight:600; color:#020617; }
 .subpiece-meta { font-size:0.8rem; color:var(--muted); }
 .subpiece-link { font-size:0.78rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -326,28 +346,32 @@ dd.meta-value { margin:0; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
 
-/* Composer dropdown (NEW) */
-.composer-suggest {
-  position: relative;
+/* Composer dropdown menu */
+.composer-menu{
+  display:none;
+  position:relative;
 }
-.composer-menu {
+.composer-menu .composer-list{
   position:absolute;
-  z-index:50;
-  left:0; right:0;
-  top: calc(100% + 6px);
+  top:4px;
+  left:0;
+  right:0;
   background:#fff;
   border:1px solid var(--border-subtle);
   border-radius:14px;
-  box-shadow:0 14px 34px rgba(15,23,42,0.14);
-  max-height: 240px;
+  box-shadow:0 14px 30px rgba(15,23,42,0.10);
+  max-height:240px;
   overflow:auto;
-  display:none;
+  z-index:50;
+  padding:6px;
 }
-.composer-item {
-  padding:8px 10px;
-  font-size:0.9rem;
+.composer-item{
+  padding:7px 10px;
+  border-radius:12px;
   cursor:pointer;
+  font-size:0.9rem;
+  color:var(--text);
 }
-.composer-item:hover {
+.composer-item:hover{
   background: rgba(35,75,184,0.06);
 }
