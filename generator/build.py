@@ -977,11 +977,12 @@ index_template = """<!doctype html>
   </div>
 </main>
 
+*** PATCH UNIQUE — remplace le bloc <script>…</script> de index_template par celui-ci ***
+*** (dans build.py : dans la variable index_template, remplace TOUT le <script>…</script> actuel) ***
+
 <script>
   const searchInput = document.getElementById('searchInput');
   const instrInput = document.getElementById('instrInput');
-  const yearFrom = document.getElementById('yearFrom');
-  const yearTo = document.getElementById('yearTo');
   const musicFilter = document.getElementById('musicFilter');
   const sourceFilter = document.getElementById('sourceFilter');
   const entriesContainer = document.getElementById('entries');
@@ -989,235 +990,95 @@ index_template = """<!doctype html>
   const noResults = document.getElementById('noResults');
   function normalize(s){ return (s || '').toLowerCase(); }
 
-  function parseIntSafe(x){
-    const n = parseInt(x, 10);
-    return Number.isFinite(n) ? n : null;
+  // --- NEW: Composer autocomplete (dropdown raw + token search) ---
+  // We inject a datalist at runtime (no HTML template changes needed)
+  const composerWrap = searchInput.closest('div');
+  const composerLabel = composerWrap.querySelector('label');
+  if (composerLabel) composerLabel.textContent = 'Composer (type to search)';
+  searchInput.placeholder = 'Type composer… (e.g. von, hessen, moritz)';
+
+  const composerList = document.createElement('datalist');
+  composerList.id = 'composerList';
+  document.body.appendChild(composerList);
+  searchInput.setAttribute('list', 'composerList');
+
+  // Tokenizer: keep all "words" (including particles), strip punctuation, normalize whitespace.
+  function tokenizeName(raw){
+    const s = (raw || '')
+      .toLowerCase()
+      .replace(/[\u2019\u2018]/g, "'")
+      .replace(/[^a-z0-9\u00C0-\u024F'\- ]+/g, ' ') // keep latin letters (incl accents), digits, apostrophe, hyphen
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!s) return [];
+    // split into tokens; keep small particles too (von/de/da/etc)
+    return s.split(' ').filter(Boolean);
   }
 
-  // -------------------------
-  // Search Tool controls
-  // -------------------------
-  const stMode  = document.getElementById('stMode');
-  const stCmp   = document.getElementById('stCmp');
-  const stInstr = document.getElementById('stInstr');
-  const stQty   = document.getElementById('stQty');
-  const stAdd   = document.getElementById('stAdd');
-  const stClear = document.getElementById('stClear');
-  const stActive = document.getElementById('stActive');
+  // Optional light tolerance: also index de-accented tokens (so typing "Hessen" works if accents exist)
+  function stripDiacritics(s){
+    try { return s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+    catch(e){ return s; }
+  }
 
-  // injected by Python: [{k:"cnto", n:123}, ...]
-  const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
-  const stRules = []; // {mode:"include"|"exclude", cmp:"gte"|"eq", k:"cnto", n:3}
+  // Build composer index from cards (raw display preserved)
+  // We store per-card tokens for fast matching and build global list for dropdown.
+  const composerFreq = new Map();     // raw -> count
+  const composerTokensCache = new WeakMap(); // card -> Set(tokens)
 
-  SEARCH_TOOL_INSTRS.forEach(o => {
-    const opt = document.createElement('option');
-    opt.value = o.k;
-    opt.textContent = `${o.k} (${o.n})`;
-    stInstr.appendChild(opt);
+  cards.forEach(card => {
+    const raw = (card.dataset.composerRaw || '').trim();
+    if (!raw) return;
+
+    composerFreq.set(raw, (composerFreq.get(raw) || 0) + 1);
+
+    const toks = tokenizeName(raw);
+    const toks2 = toks.map(stripDiacritics);
+    const all = new Set([...toks, ...toks2]);
+    composerTokensCache.set(card, all);
   });
 
-  function renderStRules(){
-    stActive.innerHTML = '';
-    stRules.forEach((r, idx) => {
-      const chip = document.createElement('span');
-      chip.className = 'tag tag-conc';
-      chip.style.cursor = 'pointer';
-      const sign = r.mode === 'include' ? '+' : '–';
-      const cmp = (r.cmp === 'eq') ? '=' : '≥';
-      chip.textContent = `${sign} ${r.k} ${cmp} ${r.n}  ×`;
-      chip.title = 'Click to remove';
-      chip.addEventListener('click', () => {
-        stRules.splice(idx, 1);
-        renderStRules();
-        applyFilters();
-      });
-      stActive.appendChild(chip);
-    });
+  // Fill datalist with RAW names as in sheet (sorted by frequency desc, then alpha)
+  const composerSorted = Array.from(composerFreq.entries())
+    .sort((a,b) => (b[1]-a[1]) || a[0].localeCompare(b[0]));
+  composerList.innerHTML = composerSorted
+    .map(([raw, n]) => `<option value="${raw.replace(/"/g,'&quot;')}"></option>`)
+    .join('');
+
+  // Parse composer query into tokens (so typing "von hess" works)
+  function composerQueryTokens(q){
+    const toks = tokenizeName(q);
+    const toks2 = toks.map(stripDiacritics);
+    // Remove 1-letter fragments to avoid too much noise
+    return [...new Set([...toks, ...toks2])].filter(t => t.length >= 2);
   }
 
-  stAdd.addEventListener('click', () => {
-    const k = stInstr.value;
-    const n = parseInt(stQty.value || '1', 10);
-    const mode = stMode.value;
-    const cmp = stCmp.value;
-    if(!k) return;
-    stRules.push({mode, cmp, k, n});
-    renderStRules();
-    applyFilters();
-  });
+  function matchesComposer(card, q){
+    if (!q) return true;
+    const qt = composerQueryTokens(q);
+    if (!qt.length) return true;
 
-  stClear.addEventListener('click', () => {
-    stRules.length = 0;
-    renderStRules();
-    applyFilters();
-  });
+    const raw = (card.dataset.composerRaw || '').trim();
+    if (!raw) return false;
 
-  // -------------------------
-  // Cache parsers per card
-  // -------------------------
-  function parseSearchToolPieces(card){
-    if(card.__stPieces) return card.__stPieces;
+    // Fast path: raw includes q (for exact prefix/substring)
+    const rawN = stripDiacritics(raw.toLowerCase());
+    const qN = stripDiacritics(q.toLowerCase());
+    if (rawN.includes(qN)) return true;
 
-    const raw = card.dataset.stoolPieces || '';
-    const pieces = [];
-    if(raw){
-      // format: pid@@sc1||sc2##pid@@sc1||...
-      raw.split('##').forEach(chunk => {
-        if(!chunk) return;
-        const parts = chunk.split('@@');
-        if(parts.length !== 2) return;
-        const pid = parts[0];
-        const scRaw = parts[1] || '';
-        const scenarios = [];
-
-        scRaw.split('||').forEach(scStr => {
-          if(!scStr) return;
-          const sc = {};
-          scStr.split('|').forEach(pair => {
-            const kv = pair.split('=');
-            if(kv.length !== 2) return;
-            const k = kv[0];
-            const v = kv[1];
-            if(k && v) sc[k] = parseInt(v, 10) || 0;
-          });
-          scenarios.push(sc);
-        });
-
-        pieces.push({pid, scenarios});
-      });
-    }
-    card.__stPieces = pieces;
-    return pieces;
-  }
-
-  function parseYearRangesPieces(card){
-    if(card.__yrPieces) return card.__yrPieces;
-
-    const raw = card.dataset.yrPieces || '';
-    const pieces = [];
-    if(raw){
-      // format: pid@@min:max||min:max##pid@@...
-      raw.split('##').forEach(chunk => {
-        if(!chunk) return;
-        const parts = chunk.split('@@');
-        if(parts.length !== 2) return;
-        const pid = parts[0];
-        const rangesRaw = parts[1] || '';
-        const ranges = [];
-
-        rangesRaw.split('||').forEach(r => {
-          if(!r) return;
-          const mm = r.split(':');
-          if(mm.length !== 2) return;
-          const a = parseIntSafe(mm[0]);
-          const b = parseIntSafe(mm[1]);
-          if(a !== null && b !== null) ranges.push([a,b]);
-        });
-
-        pieces.push({pid, ranges});
-      });
-    }
-    card.__yrPieces = pieces;
-    return pieces;
-  }
-
-  // -------------------------
-  // Matching logic
-  // -------------------------
-  function ruleOk(val, rule){
-    const n = rule.n;
-    const cmp = rule.cmp;
-    if(rule.mode === 'include'){
-      if(cmp === 'eq') return (val === n);
-      return (val >= n);
-    } else { // exclude
-      if(cmp === 'eq') return (val !== n);
-      return (val < n);
-    }
-  }
-
-  // Returns {ok:boolean, matchPids:Set}
-  function matchesSearchTool(card){
-    if(!stRules.length) return {ok:true, matchPids:new Set()};
-    const pieces = parseSearchToolPieces(card);
-    if(!pieces.length) return {ok:false, matchPids:new Set()};
-
-    const matchPids = new Set();
-
-    for(const p of pieces){
-      const scs = p.scenarios || [];
-      if(!scs.length) continue;
-
-      const okPiece = scs.some(sc => {
-        for(const r of stRules){
-          const val = sc[r.k] || 0;
-          if(!ruleOk(val, r)) return false;
-        }
-        return true;
-      });
-
-      if(okPiece){
-        matchPids.add(p.pid);
+    // Token path: every query token must match at least one token by prefix
+    const toks = composerTokensCache.get(card) || new Set(tokenizeName(raw).map(stripDiacritics));
+    for (const t of qt){
+      let ok = false;
+      for (const x of toks){
+        if (x.startsWith(t)) { ok = true; break; }
       }
+      if (!ok) return false;
     }
-
-    return {ok: matchPids.size > 0, matchPids};
-  }
-
-  function overlapsYearRange(rmin, rmax, fromY, toY){
-    if(fromY !== null && rmax < fromY) return false;
-    if(toY   !== null && rmin > toY)   return false;
     return true;
   }
 
-  // Returns {ok:boolean, matchPids:Set}
-  function matchesYearFilter(card){
-    const fromY = parseIntSafe(yearFrom.value);
-    const toY   = parseIntSafe(yearTo.value);
-    if(fromY === null && toY === null) return {ok:true, matchPids:new Set()};
-
-    const pieces = parseYearRangesPieces(card);
-    if(!pieces.length) return {ok:false, matchPids:new Set()};
-
-    const matchPids = new Set();
-
-    for(const p of pieces){
-      const ranges = p.ranges || [];
-      if(!ranges.length) continue;
-
-      const okPiece = ranges.some(([a,b]) => overlapsYearRange(a,b, fromY, toY));
-      if(okPiece) matchPids.add(p.pid);
-    }
-
-    return {ok: matchPids.size > 0, matchPids};
-  }
-
-  function applyHighlight(card, matchPids){
-    // highlight lines in collections (subpieces)
-    const lines = card.querySelectorAll('.subpiece-line[data-pid]');
-    if(!lines.length) return;
-
-    let count = 0;
-    lines.forEach(ln => {
-      const pid = ln.dataset.pid || '';
-      const hit = matchPids && matchPids.has(pid);
-      ln.classList.toggle('match', !!hit);
-      if(hit) count++;
-    });
-
-    const badge = card.querySelector('.subpieces-matchcount');
-    if(badge){
-      if(matchPids && matchPids.size){
-        badge.textContent = `• ${count} match${count===1?'':'es'}`;
-      } else {
-        badge.textContent = '';
-      }
-    }
-  }
-
-  // -------------------------
-  // Dropdown sets for music/source
-  // -------------------------
+  // --- existing: fill Music/Source filters ---
   const musicSet = new Set();
   const sourceSet = new Set();
   cards.forEach(card => {
@@ -1231,63 +1092,28 @@ index_template = """<!doctype html>
     const o=document.createElement('option'); o.value=v; o.textContent=v; sourceFilter.appendChild(o);
   });
 
-  // -------------------------
-  // Main filter
-  // -------------------------
   function applyFilters() {
-    const q  = normalize(searchInput.value);
+    const qComposer = searchInput.value;        // now dedicated to composer
     const qi = normalize(instrInput.value);
     const mt = musicFilter.value;
     const st = sourceFilter.value;
     let visible = 0;
 
     cards.forEach(card => {
-      const text  = normalize(card.dataset.search);
       const instr = normalize(card.dataset.instr);
       const mts = (card.dataset.musicTypes || '').split('||').filter(Boolean);
       const sts = (card.dataset.sourceTypes || '').split('||').filter(Boolean);
 
       let ok = true;
-      if (q  && !text.includes(q)) ok = false;
       if (qi && !instr.includes(qi)) ok = false;
       if (mt && !mts.includes(mt)) ok = false;
       if (st && !sts.includes(st)) ok = false;
 
-      // Search Tool (collection intelligent)
-      let stMatch = {ok:true, matchPids:new Set()};
-      if(ok){
-        stMatch = matchesSearchTool(card);
-        if(!stMatch.ok) ok = false;
-      }
-
-      // Year filter (collection intelligent)
-      let yrMatch = {ok:true, matchPids:new Set()};
-      if(ok){
-        yrMatch = matchesYearFilter(card);
-        if(!yrMatch.ok) ok = false;
-      }
-
-      // Apply highlight: intersection of matches when both filters active
-      // If only one active, use that set. If none active, clear.
-      const stActiveOn = stRules.length > 0;
-      const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
-
-      let highlightSet = null;
-      if(stActiveOn && yrActiveOn){
-        highlightSet = new Set();
-        stMatch.matchPids.forEach(pid => { if(yrMatch.matchPids.has(pid)) highlightSet.add(pid); });
-      } else if(stActiveOn){
-        highlightSet = stMatch.matchPids;
-      } else if(yrActiveOn){
-        highlightSet = yrMatch.matchPids;
-      } else {
-        highlightSet = new Set();
-      }
+      // NEW: composer token search (supports "von" -> "Von Hessen, Moritz")
+      if (ok && !matchesComposer(card, qComposer)) ok = false;
 
       card.style.display = ok ? '' : 'none';
       if (ok) visible++;
-
-      applyHighlight(card, highlightSet);
     });
 
     noResults.style.display = visible ? 'none' : '';
@@ -1295,10 +1121,12 @@ index_template = """<!doctype html>
 
   searchInput.addEventListener('input', applyFilters);
   instrInput.addEventListener('input', applyFilters);
-  yearFrom.addEventListener('input', applyFilters);
-  yearTo.addEventListener('input', applyFilters);
   musicFilter.addEventListener('change', applyFilters);
   sourceFilter.addEventListener('change', applyFilters);
+
+  // --- Important: requires data-composer-raw on each card ---
+  // If your build.py does not already add it, add in the entry HTML:
+  // data-composer-raw="{escape_attr(hrec['composer_raw'])}"
 </script>
 </body>
 </html>
@@ -1685,30 +1513,31 @@ def main():
 
         open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
 
-        group_html_parts.append(f"""
-    <details class="entry"
-      data-search="{escape_attr(search_blob)}"
-      data-music-types="{escape_attr('||'.join(music_types_set))}"
-      data-source-types="{escape_attr('||'.join(source_types_set))}"
-      data-instr="{escape_attr(instr_blob)}"
-      data-stool-pieces="{escape_attr(stool_pieces_blob)}"
-      data-yr-pieces="{escape_attr(yr_pieces_blob)}">
-      <summary>
-        <div class="entry-main">
-          <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
-<div class="entry-composer">{composer_line}</div>
-          <div class="entry-tags">{''.join(tags_html)}</div>
-        </div>
-        <div class="entry-arrow">›</div>
-      </summary>
-      <div class="entry-body">
-        {instr_block}
-        {meta_html}
-        {sub_block}
-        {open_link_html}
-      </div>
-    </details>
-    """)
+# === PATCH UNIQUE : remplace ENTIEREMENT le bloc group_html_parts.append(f""" ... """) par celui-ci ===
+group_html_parts.append(f"""
+<details class="entry"
+  data-search="{escape_attr(search_blob)}"
+  data-music-types="{escape_attr('||'.join(music_types_set))}"
+  data-source-types="{escape_attr('||'.join(source_types_set))}"
+  data-instr="{escape_attr(instr_blob)}"
+  data-stool="{escape_attr(stool_blob)}"
+  data-composer-raw="{escape_attr(hrec.get('composer_raw',''))}">
+  <summary>
+    <div class="entry-main">
+      <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
+      <div class="entry-composer">{hrec['composer'] or ''}</div>
+      <div class="entry-tags">{''.join(tags_html)}</div>
+    </div>
+    <div class="entry-arrow">›</div>
+  </summary>
+  <div class="entry-body">
+    {instr_block}
+    {meta_html}
+    {sub_block}
+    {open_link_html}
+  </div>
+</details>
+""")
 
     entries_html = "\n".join(group_html_parts)
 
