@@ -1,11 +1,15 @@
 # generator/build.py
 # ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
-# Features:
-# - Google Sheets CSV as source (no API)
-# - Full static site generation (index + piece-*.html) + style.css + assets copy
-# - Instrumentation Search Tool (scenario-based include/exclude + qty)
-# - "Smart collection mode": collections show only matching subpieces (and highlight them) when filters are active
-# - Composer dropdown: type any word (e.g. "von") to find raw names; selecting filters by EXACT raw match
+#
+# Script "mis en commun" (union) des deux versions fournies :
+# - Composer dropdown (recherche par mots / particules, affichage raw, filtre exact sur sélection)
+# - Smart collections (collections visibles si une sous-pièce match ; contenu filtré/affiché selon filtre compositeur)
+# - Instrumentation Search Tool builder (include/exclude + ≥ / =), collection-intelligent + highlight + badge match
+# - RISM (Holdings + Date) : indexation plein texte + drawer sur pages détail
+# - RISM chronology (Earliest/Latest year) : filtre From/To + highlight/badge (non destructif)
+#
+# NOTE: rien n'est "tranché" côté rendu final (on garde le superset des capacités).
+# Pour “garder en mémoire” ici : active Memory dans Settings > Personalization > Memory, puis redis “garde ce script”.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -41,7 +45,12 @@ COL_INSTR_MAIN = "Instrumentation principal\nRISM extended"
 COL_INSTR_ALT = "Instrumentation alternative\nRISM extended"
 COL_INSTR_CAT = "Instrumentation from Catalogs"
 COL_SEARCH_TOOL = "Search Tool"
-COL_RISM_DATE = "RISM Date"  # optional (safe if missing)
+
+# RISM extended columns (may be missing)
+COL_RISM_HOLDINGS = "RISM Holdings"
+COL_RISM_DATE = "RISM Date"
+COL_RISM_EARLIEST_YEAR = "RISM Earliest Year"
+COL_RISM_LATEST_YEAR = "RISM Latest Year"
 
 EM_TITLES = [
     "The Early Trombone : a Catalog of Music",
@@ -70,6 +79,15 @@ def clean_numberish(val):
     s = str(val).strip()
     s = re.sub(r"\.0$", "", s)
     return "" if s.lower() == "nan" else s
+
+def parse_int_safe(x):
+    x = clean_numberish(x)
+    if not x:
+        return None
+    try:
+        return int(x)
+    except ValueError:
+        return None
 
 def escape_textnode(val):
     s = clean_str(val)
@@ -116,8 +134,9 @@ def parse_conc_ids(s):
     s = clean_str(s)
     if not s:
         return []
-    # Accept ; , \n, and keep / inside ids (e.g. 1355/0)
-    parts = re.split(r"[;,\n]+", s)
+    # Accept ; , \n, keep / inside ids (e.g. 1355/0); tolerate brackets.
+    txt = s.replace("[", "").replace("]", "")
+    parts = re.split(r"[;,\n]+", txt)
     return [p.strip() for p in parts if p.strip()]
 
 def format_uniform_instr(raw_text, alternative=False):
@@ -190,12 +209,27 @@ def norm_url(u):
     return clean_str(u).strip()
 
 def composer_tokens(raw):
-    # tokens used ONLY for suggestions; filtering when selecting is EXACT raw match
+    # tokens used ONLY for suggestions; filtering on selection is EXACT raw match
     s = clean_str(raw).lower()
-    # keep letters (incl accents) and spaces
     s = re.sub(r"[^a-zà-öø-ÿ\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+# =========================
+# RISM helpers
+# =========================
+def holdings_lines(txt):
+    txt = clean_str(txt)
+    if not txt:
+        return []
+    return [ln.strip() for ln in re.split(r"\r?\n", txt) if ln.strip()]
+
+def holdings_list_html(txt):
+    lines = holdings_lines(txt)
+    if not lines:
+        return ""
+    lis = "".join(f"<li>{html.escape(ln, quote=False)}</li>" for ln in lines)
+    return f'<ul class="rism-holdings">{lis}</ul>'
 
 # =========================
 # Search Tool parser (scenario-based)
@@ -299,7 +333,6 @@ def parse_search_tool_to_scenarios(text, limit=256):
         if not seg:
             continue
 
-        # Detect: [ ... ] / [ ... ] ...
         if seg.startswith("[") and seg.endswith("]") and "/" in seg:
             parts = _split_top_level(seg, "/")
             if len(parts) >= 2 and all(p.strip().startswith("[") and p.strip().endswith("]") for p in parts):
@@ -415,7 +448,7 @@ def build_header_html():
 """
 
 # =========================
-# CSS (your working CSS + small additions for dropdown/date/highlight)
+# CSS (superset)
 # =========================
 style_css = r"""
 :root {
@@ -529,7 +562,7 @@ h1{
 
 /* Layout */
 .shell { max-width:1400px; margin:0 auto; padding:16px 20px 26px; }
-.layout { display:grid; grid-template-columns: minmax(260px,320px) minmax(0,1fr); gap:16px; }
+.layout { display:grid; grid-template-columns: minmax(260px,340px) minmax(0,1fr); gap:16px; }
 @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
 
 .card {
@@ -553,7 +586,7 @@ h1{
   text-transform:uppercase; letter-spacing:.14em;
   color:var(--muted); margin-bottom:6px;
 }
-.filters input[type="text"] {
+.filters input[type="text"], .filters input[type="number"] {
   width:100%; border-radius:999px;
   border:1px solid var(--border-subtle);
   background:#fafaff;
@@ -568,7 +601,8 @@ h1{
   outline:none; cursor:pointer;
 }
 .filters-row { display:flex; flex-direction:column; gap:10px; }
-.filter-inline { display:flex; gap:8px; flex-wrap:wrap; }
+.filter-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.filter-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
 
 .entries { max-height: calc(100vh - 170px); overflow:auto; padding-right:4px; }
 
@@ -593,7 +627,7 @@ summary::-webkit-details-marker { display:none; }
 .entry-main { display:flex; flex-direction:column; gap:3px; }
 .entry-id { font-weight:650; font-size:0.96rem; color:#020617; }
 
-/* Composer line can now contain date chip too */
+/* Composer line can contain chips */
 .entry-composer {
   font-size:0.85rem;
   color:var(--muted);
@@ -602,6 +636,7 @@ summary::-webkit-details-marker { display:none; }
   gap:6px;
   align-items:center;
 }
+
 .entry-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; align-items:center; }
 
 .tag {
@@ -623,8 +658,7 @@ summary::-webkit-details-marker { display:none; }
   letter-spacing:.12em;
   font-weight:650;
 }
-
-/* RISM date chip (no label, just the date) */
+/* RISM date chip (text) */
 .tag-rismdate{
   border-color: var(--violet-border);
   background: var(--violet-bg);
@@ -695,13 +729,20 @@ dd.meta-value { margin:0; }
   border:1px dashed var(--border-subtle);
   padding:7px 9px 7px; background:#f2f3ff;
 }
-.subpieces-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:4px; }
+.subpieces-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:4px; display:flex; gap:8px; align-items:center; }
+.subpieces-matchcount{ font-size:.74rem; color:var(--violet-text); opacity:.85; }
 .subpiece-line {
   padding:6px 0; border-top:1px solid #d8ddf5;
   font-size:0.88rem; display:flex; flex-direction:column; gap:2px;
 }
 .subpiece-line:first-of-type { border-top:none; }
-.subpiece-line.is-match { background: rgba(35,75,184,0.05); border-radius:10px; padding:6px 8px; }
+.subpiece-line.is-match {
+  border-top:1px solid rgba(139,92,246,0.35);
+  background: rgba(139,92,246,0.07);
+  border-radius:10px;
+  padding-left:8px;
+  padding-right:8px;
+}
 .subpiece-id { font-weight:600; color:#020617; }
 .subpiece-meta { font-size:0.8rem; color:var(--muted); }
 .subpiece-link { font-size:0.78rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -765,7 +806,7 @@ dd.meta-value { margin:0; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
 
-/* Composer dropdown menu */
+/* Composer dropdown (menu) */
 .composer-menu{
   display:none;
   position:relative;
@@ -794,6 +835,62 @@ dd.meta-value { margin:0; }
 .composer-item:hover{
   background: rgba(35,75,184,0.06);
 }
+
+/* RISM drawer on detail pages */
+details.rism {
+  margin-top:14px;
+  border:1.5px solid rgba(139,92,246,0.35);
+  background: linear-gradient(180deg, rgba(139,92,246,0.08), rgba(255,255,255,0.95));
+  border-radius:18px;
+  padding: 10px 12px;
+}
+details.rism > summary{
+  cursor:pointer;
+  list-style:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+details.rism > summary::-webkit-details-marker{display:none}
+.rism-left{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.rism-title{
+  font-size:.78rem; text-transform:uppercase; letter-spacing:.14em;
+  color:var(--violet-text);
+  font-weight:800;
+}
+.rism-mini{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+.rism-mini .pill{
+  font-size:.74rem;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid rgba(139,92,246,0.45);
+  background: rgba(139,92,246,0.10);
+  color: var(--violet-text);
+  white-space:nowrap;
+}
+.rism-body{
+  margin-top:10px;
+  border-top:1px solid rgba(139,92,246,0.22);
+  padding-top:10px;
+  display:grid;
+  grid-template-columns: minmax(0,1fr);
+  gap:10px;
+}
+.rism-kv{
+  display:grid;
+  grid-template-columns: minmax(0,140px) minmax(0,1fr);
+  gap:6px 10px;
+  font-size:.88rem;
+}
+.rism-kv .k{color:var(--muted); font-weight:600; font-size:.80rem}
+.rism-kv .v{color:#111827}
+.rism-holdings{
+  margin:0; padding-left:16px;
+  font-size:.88rem; line-height:1.35;
+  max-height: 260px; overflow:auto;
+}
+.rism-hint{font-size:.80rem; color:var(--muted);}
 """
 
 # =========================
@@ -842,7 +939,7 @@ index_template = """<!doctype html>
         <div class="filters-row">
           <div>
             <label for="searchInput">Global search</label>
-            <input id="searchInput" type="text" placeholder="Composer, title, number, library…" />
+            <input id="searchInput" type="text" placeholder="Composer, title, number, library, RISM…" />
           </div>
 
           <div style="position:relative;">
@@ -850,6 +947,10 @@ index_template = """<!doctype html>
             <input id="composerInput" type="text" placeholder="Type: von, moritz, hessen…" autocomplete="off" />
             <div class="composer-menu" id="composerMenu">
               <div class="composer-list" id="composerList"></div>
+            </div>
+            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+              <button id="composerClear" type="button" class="tag" style="cursor:pointer;">Clear composer</button>
+              <span id="composerActive" class="tag tag-conc" style="display:none; cursor:pointer;"></span>
             </div>
           </div>
 
@@ -859,29 +960,31 @@ index_template = """<!doctype html>
           </div>
 
           <div>
+            <label>RISM chronology</label>
+            <div class="filter-grid-2">
+              <input id="yearFrom" type="number" inputmode="numeric" placeholder="From (e.g. 1650)" />
+              <input id="yearTo" type="number" inputmode="numeric" placeholder="To (e.g. 1750)" />
+            </div>
+          </div>
+
+          <div>
             <label>Instrumentation Search Builder</label>
             <div class="filter-inline" style="gap:6px;">
               <select id="stMode">
                 <option value="include">Include</option>
                 <option value="exclude">Exclude</option>
               </select>
-              <select id="stInstr">
-                <option value="">Select instrument…</option>
-              </select>
               <select id="stCmp">
                 <option value="ge">≥</option>
                 <option value="eq">=</option>
               </select>
+              <select id="stInstr">
+                <option value="">Select instrument…</option>
+              </select>
               <select id="stQty">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                <option value="7">7</option><option value="8">8</option><option value="9">9</option>
                 <option value="10">10</option>
               </select>
               <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
@@ -918,8 +1021,12 @@ index_template = """<!doctype html>
   const composerInput = document.getElementById('composerInput');
   const composerMenu = document.getElementById('composerMenu');
   const composerList = document.getElementById('composerList');
+  const composerClear = document.getElementById('composerClear');
+  const composerActive = document.getElementById('composerActive');
 
   const instrInput = document.getElementById('instrInput');
+  const yearFrom = document.getElementById('yearFrom');
+  const yearTo = document.getElementById('yearTo');
   const musicFilter = document.getElementById('musicFilter');
   const sourceFilter = document.getElementById('sourceFilter');
   const entriesContainer = document.getElementById('entries');
@@ -928,12 +1035,17 @@ index_template = """<!doctype html>
 
   function normalize(s){ return (s || '').toLowerCase(); }
   function normSpaces(s){ return (s || '').replace(/\\s+/g,' ').trim(); }
+  function parseIntSafe(x){
+    const n = parseInt(x, 10);
+    return Number.isFinite(n) ? n : null;
+  }
   const WORD_RE = /[A-Za-zÀ-ÖØ-öø-ÿ]+/g;
   function wordsOnly(s){ return (normalize(s).match(WORD_RE) || []); }
 
   // ===== Composer dropdown data (injected by Python)
   // [{d:"Hessen, Moritz von", t:"hessen moritz von"}, ...]
   const COMPOSERS = @@COMPOSERS@@;
+  let composerSelected = ""; // exact raw, only set on click
 
   function closeComposerMenu(){
     composerMenu.style.display = 'none';
@@ -946,7 +1058,10 @@ index_template = """<!doctype html>
       div.className = 'composer-item';
       div.textContent = obj.d;
       div.addEventListener('click', () => {
+        composerSelected = obj.d;      // EXACT
         composerInput.value = obj.d;   // keep RAW
+        composerActive.style.display = '';
+        composerActive.textContent = 'Composer: ' + composerSelected + ' ×';
         closeComposerMenu();
         applyFilters();
       });
@@ -971,29 +1086,40 @@ index_template = """<!doctype html>
     }
     return hits;
   }
+
   composerInput.addEventListener('input', () => {
+    // if user edits after selecting, drop exact filter until re-select
+    if(composerSelected && composerInput.value !== composerSelected){
+      composerSelected = "";
+      composerActive.style.display = 'none';
+      composerActive.textContent = '';
+    }
     const hits = computeComposerHits();
     if(!hits.length) closeComposerMenu();
     else openComposerMenu(hits);
     applyFilters();
   });
+
   composerInput.addEventListener('focus', () => {
     const hits = computeComposerHits();
     if(hits.length) openComposerMenu(hits);
   });
+
   document.addEventListener('click', (ev) => {
     if(!composerMenu.contains(ev.target) && ev.target !== composerInput){
       closeComposerMenu();
     }
   });
 
-  // EXACT match against raw composer on the card
-  function matchesComposer(card){
-    const q = normSpaces(composerInput.value);
-    if(!q) return true;
-    const raw = normSpaces(card.dataset.composerRaw || '');
-    return raw === q;
-  }
+  composerClear.addEventListener('click', () => {
+    composerSelected = "";
+    composerInput.value = "";
+    composerActive.style.display = 'none';
+    composerActive.textContent = '';
+    closeComposerMenu();
+    applyFilters();
+  });
+  composerActive.addEventListener('click', () => composerClear.click());
 
   // ===== Search Tool controls
   const stMode  = document.getElementById('stMode');
@@ -1005,7 +1131,7 @@ index_template = """<!doctype html>
   const stActive = document.getElementById('stActive');
 
   const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
-  const stRules = []; // {mode:"include"|"exclude", k:"cnto", cmp:"ge"|"eq", n:3}
+  const stRules = []; // {mode:"include"|"exclude", cmp:"ge"|"eq", k:"cnto", n:3}
 
   SEARCH_TOOL_INSTRS.forEach(o => {
     const opt = document.createElement('option');
@@ -1039,7 +1165,7 @@ index_template = """<!doctype html>
     const mode = stMode.value;
     const cmp = stCmp.value;
     if(!k) return;
-    stRules.push({mode, k, cmp, n});
+    stRules.push({mode, cmp, k, n});
     renderStRules();
     applyFilters();
   });
@@ -1050,59 +1176,148 @@ index_template = """<!doctype html>
     applyFilters();
   });
 
-  // Parse scenarios from data-stool (cached)
-  function parseScenarios(card){
-    if(card.__stScenarios) return card.__stScenarios;
-    const raw = card.dataset.stool || '';
-    const scenarios = [];
+  // --------- Per-card parsers (pieces blobs)
+  function parseSearchToolPieces(card){
+    if(card.__stPieces) return card.__stPieces;
+    const raw = card.dataset.stoolPieces || '';
+    const pieces = [];
     if(raw){
-      raw.split('||').forEach(scStr => {
-        const sc = {};
-        if(!scStr) return;
-        scStr.split('|').forEach(pair => {
-          const parts = pair.split('=');
-          if(parts.length !== 2) return;
-          const k = parts[0];
-          const v = parts[1];
-          if(k && v) sc[k] = parseInt(v,10) || 0;
+      raw.split('##').forEach(chunk => {
+        if(!chunk) return;
+        const parts = chunk.split('@@');
+        if(parts.length !== 2) return;
+        const pid = parts[0];
+        const scRaw = parts[1] || '';
+        const scenarios = [];
+        scRaw.split('||').forEach(scStr => {
+          if(!scStr) return;
+          const sc = {};
+          scStr.split('|').forEach(pair => {
+            const kv = pair.split('=');
+            if(kv.length !== 2) return;
+            const k = kv[0];
+            const v = kv[1];
+            if(k && v) sc[k] = parseInt(v, 10) || 0;
+          });
+          scenarios.push(sc);
         });
-        scenarios.push(sc);
+        pieces.push({pid, scenarios});
       });
     }
-    card.__stScenarios = scenarios;
-    return scenarios;
+    card.__stPieces = pieces;
+    return pieces;
   }
 
-  function rulePasses(r, val){
-    // ceinture + bretelles: coerce everything to int
-    const n = parseInt(r.n,10) || 0;
-    const v = parseInt(val,10) || 0;
+  function parseYearRangesPieces(card){
+    if(card.__yrPieces) return card.__yrPieces;
+    const raw = card.dataset.yrPieces || '';
+    const pieces = [];
+    if(raw){
+      raw.split('##').forEach(chunk => {
+        if(!chunk) return;
+        const parts = chunk.split('@@');
+        if(parts.length !== 2) return;
+        const pid = parts[0];
+        const rangesRaw = parts[1] || '';
+        const ranges = [];
+        rangesRaw.split('||').forEach(r => {
+          if(!r) return;
+          const mm = r.split(':');
+          if(mm.length !== 2) return;
+          const a = parseIntSafe(mm[0]);
+          const b = parseIntSafe(mm[1]);
+          if(a !== null && b !== null) ranges.push([a,b]);
+        });
+        pieces.push({pid, ranges});
+      });
+    }
+    card.__yrPieces = pieces;
+    return pieces;
+  }
 
-    if(r.mode === 'include'){
-      if(r.cmp === 'eq') return v === n;
-      return v >= n;
+  function ruleOk(val, rule){
+    const n = rule.n;
+    if(rule.mode === 'include'){
+      if(rule.cmp === 'eq') return (val === n);
+      return (val >= n);
     } else {
-      // exclude: if eq, exclude exact; if ge, exclude >=
-      if(r.cmp === 'eq') return v !== n;
-      return v < n;
+      if(rule.cmp === 'eq') return (val !== n);
+      return (val < n);
     }
   }
 
+  // Returns {ok:boolean, matchPids:Set}
   function matchesSearchTool(card){
-    if(!stRules.length) return true;
-    const scs = parseScenarios(card);
-    if(!scs.length) return false;
+    if(!stRules.length) return {ok:true, matchPids:new Set()};
+    const pieces = parseSearchToolPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
 
-    return scs.some(sc => {
-      for(const r of stRules){
-        const val = sc[r.k] || 0;
-        if(!rulePasses(r, val)) return false;
-      }
-      return true;
-    });
+    const matchPids = new Set();
+    for(const p of pieces){
+      const scs = p.scenarios || [];
+      if(!scs.length) continue;
+
+      const okPiece = scs.some(sc => {
+        for(const r of stRules){
+          const val = sc[r.k] || 0;
+          if(!ruleOk(val, r)) return false;
+        }
+        return true;
+      });
+
+      if(okPiece) matchPids.add(p.pid);
+    }
+    return {ok: matchPids.size > 0, matchPids};
   }
 
-  // Populate filters
+  function overlapsYearRange(rmin, rmax, fromY, toY){
+    if(fromY !== null && rmax < fromY) return false;
+    if(toY   !== null && rmin > toY)   return false;
+    return true;
+  }
+
+  // Returns {ok:boolean, matchPids:Set}
+  function matchesYearFilter(card){
+    const fromY = parseIntSafe(yearFrom.value);
+    const toY   = parseIntSafe(yearTo.value);
+    if(fromY === null && toY === null) return {ok:true, matchPids:new Set()};
+
+    const pieces = parseYearRangesPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
+
+    const matchPids = new Set();
+    for(const p of pieces){
+      const ranges = p.ranges || [];
+      if(!ranges.length) continue;
+      const okPiece = ranges.some(([a,b]) => overlapsYearRange(a,b, fromY, toY));
+      if(okPiece) matchPids.add(p.pid);
+    }
+    return {ok: matchPids.size > 0, matchPids};
+  }
+
+  function applyHighlight(card, matchPids){
+    const lines = card.querySelectorAll('.subpiece-line[data-pid]');
+    if(!lines.length) return;
+
+    let count = 0;
+    lines.forEach(ln => {
+      const pid = ln.dataset.pid || '';
+      const hit = matchPids && matchPids.has(pid);
+      ln.classList.toggle('is-match', !!hit);
+      if(hit) count++;
+    });
+
+    const badge = card.querySelector('.subpieces-matchcount');
+    if(badge){
+      if(matchPids && matchPids.size){
+        badge.textContent = `• ${count} match${count===1?'':'es'}`;
+      } else {
+        badge.textContent = '';
+      }
+    }
+  }
+
+  // Populate music/source filters
   const musicSet = new Set();
   const sourceSet = new Set();
   cards.forEach(card => {
@@ -1116,47 +1331,18 @@ index_template = """<!doctype html>
     const o=document.createElement('option'); o.value=v; o.textContent=v; sourceFilter.appendChild(o);
   });
 
-  // Determine whether filters are active (for smart collection mode)
-  function filtersActive(){
-    return !!(
-      normSpaces(searchInput.value) ||
-      normSpaces(composerInput.value) ||
-      normSpaces(instrInput.value) ||
-      musicFilter.value ||
-      sourceFilter.value ||
-      stRules.length
-    );
-  }
-
-  // Piece-line matching inside a collection
-  function matchesPieceLine(line){
-    const q  = normalize(searchInput.value);
-    const qi = normalize(instrInput.value);
-    const mt = musicFilter.value;
-    const st = sourceFilter.value;
-
-    const text  = normalize(line.dataset.search || '');
-    const instr = normalize(line.dataset.instr || '');
-    const rawComposer = normSpaces(line.dataset.composerRaw || '');
-    const qComposer = normSpaces(composerInput.value);
-
-    const mts = (line.dataset.musicTypes || '').split('||').filter(Boolean);
-    const sts = (line.dataset.sourceTypes || '').split('||').filter(Boolean);
-
-    let ok = true;
-    if (q  && !text.includes(q)) ok = false;
-    if (qComposer && rawComposer !== qComposer) ok = false;
-    if (qi && !instr.includes(qi)) ok = false;
-    if (mt && !mts.includes(mt)) ok = false;
-    if (st && !sts.includes(st)) ok = false;
-
-    // Search tool scenario match on the line
-    if (ok && stRules.length){
-      // reuse parser against a fake "card"
-      const fake = { dataset: { stool: line.dataset.stool || '' } };
-      ok = matchesSearchTool(fake);
+  // For composerSelected: show only matching subpieces inside collections (non-destructif, sur l’affichage)
+  function filterCollectionContentsByComposer(card){
+    const lines = Array.from(card.querySelectorAll('.subpiece-line[data-composer-raw]'));
+    if(!lines.length) return;
+    if(!composerSelected){
+      lines.forEach(l => l.style.display = '');
+      return;
     }
-    return ok;
+    lines.forEach(l => {
+      const c = l.dataset.composerRaw || '';
+      l.style.display = (c === composerSelected) ? '' : 'none';
+    });
   }
 
   function applyFilters() {
@@ -1164,47 +1350,62 @@ index_template = """<!doctype html>
     const qi = normalize(instrInput.value);
     const mt = musicFilter.value;
     const st = sourceFilter.value;
+
     let visible = 0;
-    const active = filtersActive();
 
     cards.forEach(card => {
-      const text  = normalize(card.dataset.search);
-      const instr = normalize(card.dataset.instr);
+      const text  = normalize(card.dataset.search || '');
+      const instr = normalize(card.dataset.instr || '');
       const mts = (card.dataset.musicTypes || '').split('||').filter(Boolean);
       const sts = (card.dataset.sourceTypes || '').split('||').filter(Boolean);
 
       let ok = true;
       if (q  && !text.includes(q)) ok = false;
-      if (!matchesComposer(card)) ok = false;
       if (qi && !instr.includes(qi)) ok = false;
       if (mt && !mts.includes(mt)) ok = false;
       if (st && !sts.includes(st)) ok = false;
-      if (ok && !matchesSearchTool(card)) ok = false;
 
-      // Smart collection mode: if shown and filters active, hide non-matching subpieces + highlight matches
-      const lines = Array.from(card.querySelectorAll('.subpiece-line'));
-      if(lines.length){
-        if(ok && active){
-          let anyLine = false;
-          lines.forEach(line => {
-            const m = matchesPieceLine(line);
-            line.classList.toggle('is-match', m);
-            line.style.display = m ? '' : 'none';
-            if(m) anyLine = true;
-          });
-          // If a "collection card" passes via group-level text, but no line matches, hide the card
-          if(!anyLine) ok = false;
-        } else {
-          // reset
-          lines.forEach(line => {
-            line.classList.remove('is-match');
-            line.style.display = '';
-          });
-        }
+      // Search Tool (collection intelligent)
+      let stMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        stMatch = matchesSearchTool(card);
+        if(!stMatch.ok) ok = false;
+      }
+
+      // Year filter (collection intelligent)
+      let yrMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        yrMatch = matchesYearFilter(card);
+        if(!yrMatch.ok) ok = false;
+      }
+
+      // Composer exact filter (SMART collections: checks all composers in group)
+      if(ok && composerSelected){
+        const clist = (card.dataset.composers || '').split('||').filter(Boolean);
+        if(!clist.includes(composerSelected)) ok = false;
+      }
+
+      // highlight: intersection of SearchTool/Year when both active
+      const stActiveOn = stRules.length > 0;
+      const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
+      let highlightSet = new Set();
+
+      if(stActiveOn && yrActiveOn){
+        stMatch.matchPids.forEach(pid => { if(yrMatch.matchPids.has(pid)) highlightSet.add(pid); });
+      } else if(stActiveOn){
+        highlightSet = stMatch.matchPids;
+      } else if(yrActiveOn){
+        highlightSet = yrMatch.matchPids;
+      } else {
+        highlightSet = new Set();
       }
 
       card.style.display = ok ? '' : 'none';
-      if (ok) visible++;
+      if (ok){
+        visible++;
+        applyHighlight(card, highlightSet);
+        filterCollectionContentsByComposer(card);
+      }
     });
 
     noResults.style.display = visible ? 'none' : '';
@@ -1212,6 +1413,8 @@ index_template = """<!doctype html>
 
   searchInput.addEventListener('input', applyFilters);
   instrInput.addEventListener('input', applyFilters);
+  yearFrom.addEventListener('input', applyFilters);
+  yearTo.addEventListener('input', applyFilters);
   musicFilter.addEventListener('change', applyFilters);
   sourceFilter.addEventListener('change', applyFilters);
 </script>
@@ -1243,6 +1446,7 @@ detail_template = """<!doctype html>
 
     @@INSTR@@
     <div class="piece-meta">@@META@@</div>
+    @@RISM_DRAWER@@
     @@BIBLIO@@
     @@NOTE@@
     @@ORG@@
@@ -1293,10 +1497,8 @@ def main():
             continue
         gid = row["__group"]
         groups.setdefault(gid, []).append(zid)
-
     for gid, ids in groups.items():
         ids.sort(key=parse_zinknet)
-
     group_sizes = {gid: len(ids) for gid, ids in groups.items()}
 
     # Records
@@ -1329,7 +1531,11 @@ def main():
             "bibliography_raw": clean_str(get_col(row, COL_BIB)),
             "organology_raw": clean_str(get_col(row, COL_ORG)),
             "search_tool_raw": clean_str(get_col(row, COL_SEARCH_TOOL)),
+            # RISM extended (safe if missing)
+            "rism_holdings_raw": clean_str(get_col(row, COL_RISM_HOLDINGS)) if (COL_RISM_HOLDINGS in df.columns) else "",
             "rism_date_raw": clean_str(get_col(row, COL_RISM_DATE)) if (COL_RISM_DATE in df.columns) else "",
+            "rism_earliest_year_raw": clean_numberish(get_col(row, COL_RISM_EARLIEST_YEAR)) if (COL_RISM_EARLIEST_YEAR in df.columns) else "",
+            "rism_latest_year_raw": clean_numberish(get_col(row, COL_RISM_LATEST_YEAR)) if (COL_RISM_LATEST_YEAR in df.columns) else "",
         }
 
         lib_raw = get_col(row, COL_LIB)
@@ -1351,13 +1557,17 @@ def main():
         rec["category"] = escape_textnode(rec["category_raw"])
         rec["note"] = escape_textnode(rec["note_raw"])
         rec["organology"] = escape_textnode(rec["organology_raw"])
+
         rec["rism_date"] = escape_textnode(rec["rism_date_raw"])
+        rec["rism_holdings"] = escape_textnode(rec["rism_holdings_raw"])  # not used as HTML list
+        rec["year_min"] = parse_int_safe(rec["rism_earliest_year_raw"])
+        rec["year_max"] = parse_int_safe(rec["rism_latest_year_raw"])
 
         rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
 
         records[zid] = rec
 
-    # Concordances
+    # Concordances linking
     for rec in records.values():
         conc_ids = parse_conc_ids(rec["concordances_raw"])
         rec["concordances_ids"] = [cid for cid in conc_ids if cid in records]
@@ -1386,8 +1596,10 @@ def main():
                 "category": "", "note": "", "organology": "",
                 "concordances_ids": [],
                 "search_tool_raw": "", "search_scenarios": [],
-                "rism_date_raw": "", "rism_date": "",
-                "rism_link_raw": "",
+                "rism_holdings_raw": "", "rism_date_raw": "",
+                "rism_earliest_year_raw": "", "rism_latest_year_raw": "",
+                "rism_date": "", "rism_holdings": "",
+                "year_min": None, "year_max": None,
             }
 
     # Global Search Tool instrument index (frequency = number of records where it can appear)
@@ -1409,26 +1621,18 @@ def main():
     )
 
     # Composer dropdown index (raw display + tokens)
-    composer_set = sorted({records[z]["composer_raw"] for z in records if records[z].get("composer_raw")}, key=lambda s: s.lower())
+    composer_set = sorted(
+        {records[z]["composer_raw"] for z in records if records[z].get("composer_raw")},
+        key=lambda s: s.lower()
+    )
     composers_js = json.dumps(
         [{"d": c, "t": composer_tokens(c)} for c in composer_set],
         ensure_ascii=False
     )
 
     # =========================
-    # INDEX BUILD  (Composer smart-collection)
-    # - Adds: data-composers (all composers in the group)
-    # - Adds: data-composer-raw on each subpiece line
-    # - JS: exact composer filter keeps collections if any subpiece matches + filters Contents
+    # INDEX BUILD
     # =========================
-
-    # Master list for composer dropdown (raw strings as in the sheet: "Last, First ...")
-    composer_master = sorted(
-        {r.get("composer_raw", "") for r in records.values() if r.get("composer_raw", "")},
-        key=lambda x: x.lower()
-    )
-    composers_js = json.dumps(composer_master, ensure_ascii=False)
-
     group_html_parts = []
     sorted_group_ids = sorted(groups.keys(), key=lambda g: parse_zinknet(g))
 
@@ -1441,12 +1645,12 @@ def main():
         hrec = records[header_id]
         gcount_total = len(ids)
 
-        # tags (dedupe only inside this tag-row)
+        # tags
         used_links_tags = set()
         tags_html = []
-        if hrec["music_type_raw"]:
+        if hrec.get("music_type_raw"):
             tags_html.append(f'<span class="tag tag-type">{escape_textnode(hrec["music_type_raw"])}</span>')
-        if hrec["source_type_raw"]:
+        if hrec.get("source_type_raw"):
             tags_html.append(f'<span class="tag tag-source">{escape_textnode(hrec["source_type_raw"])}</span>')
 
         if coll_id or is_virtual_collection:
@@ -1454,7 +1658,7 @@ def main():
             nb_pieces = max(nb_pieces, 0)
             tags_html.append(f'<span class="tag tag-count">{nb_pieces} piece{"s" if nb_pieces != 1 else ""}</span>')
 
-        if hrec["concordances_ids"]:
+        if hrec.get("concordances_ids"):
             n = len(hrec["concordances_ids"])
             tags_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
 
@@ -1463,18 +1667,32 @@ def main():
             if chip:
                 tags_html.append(chip)
 
+        # RISM date chip (aggregate per group) next to composer line
+        rism_dates = sorted({
+            clean_str(records[z].get("rism_date_raw", "")).strip()
+            for z in ids
+            if clean_str(records[z].get("rism_date_raw", "")).strip()
+        })
+        date_chip = ""
+        if len(rism_dates) == 1:
+            date_chip = f'<span class="tag tag-rismdate">{escape_textnode(rism_dates[0])}</span>'
+        elif len(rism_dates) >= 2:
+            date_chip = f'<span class="tag tag-rismdate">multiple</span>'
+
+        composer_txt = hrec.get("composer", "") or ""
+        composer_line = f'{composer_txt}{date_chip}'
+
         display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
 
-        # Collections: no catalog instrumentation in main view
         instr_block = build_instr_block_for_record(hrec, include_catalogs=not (coll_id or is_virtual_collection))
 
         meta_rows = []
-        if (not is_virtual_collection) and hrec["composer"]:
+        if (not is_virtual_collection) and hrec.get("composer"):
             meta_rows.append(f'<dt class="meta-label">Composer</dt><dd class="meta-value">{hrec["composer"]}</dd>')
 
-        lib_val = hrec["library"]
-        shelf_val = hrec["shelfmark"]
-        if hrec["see_rism"]:
+        lib_val = hrec.get("library", "")
+        shelf_val = hrec.get("shelfmark", "")
+        if hrec.get("see_rism"):
             if lib_val: lib_val += " "
             lib_val += '<span class="see-rism-tag">See RISM</span>'
             if shelf_val: shelf_val += " "
@@ -1497,18 +1715,18 @@ def main():
                 r = records[pid]
 
                 conc_tag = ""
-                if r["concordances_ids"]:
+                if r.get("concordances_ids"):
                     n = len(r["concordances_ids"])
                     conc_tag = f'<div class="subpiece-conc-tag"><span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span></div>'
 
-                instr_short = r["instr_rism_main_raw"] or r["instr_catalogs_raw"]
+                instr_short = r.get("instr_rism_main_raw", "") or r.get("instr_catalogs_raw", "")
                 instr_short_disp = escape_textnode(instr_short) if instr_short else ""
 
                 used_links_line = set()
                 sub_rism = rism_chip_self(r, used_links_line)
 
                 sub_lines.append(f"""
-      <div class="subpiece-line" data-composer-raw="{escape_attr(r.get('composer_raw',''))}">
+      <div class="subpiece-line" data-pid="{escape_attr(pid)}" data-composer-raw="{escape_attr(r.get('composer_raw',''))}">
         <div><span class="subpiece-id">{escape_textnode(pid)} — {r['title'] or '(Untitled)'}</span></div>
         <div class="subpiece-meta">{r['composer'] or ''}</div>
         <div class="subpiece-meta">{instr_short_disp}</div>
@@ -1521,50 +1739,67 @@ def main():
             if sub_lines:
                 sub_block = f"""
       <div class="subpieces">
-        <div class="subpieces-title">Contents</div>
+        <div class="subpieces-title">Contents <span class="subpieces-matchcount"></span></div>
         {''.join(sub_lines)}
       </div>"""
 
-        title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
+        title_html = hrec["title"] if hrec.get("title") else ("" if is_virtual_collection else "<em>(Untitled)</em>")
         title_part = f" — {title_html}" if title_html else ""
 
-        # dataset attributes for filtering
+        # dataset attributes for filtering (full text)
         search_blob_parts = []
         for z in ids:
             rr = records[z]
             search_blob_parts.extend([
-                z, rr["composer_raw"], rr["title_raw"],
-                rr["instr_rism_main_raw"], rr["instr_rism_alt_raw"], rr["instr_catalogs_raw"],
-                rr["library_raw"], rr["shelfmark_raw"],
-                rr["music_type_raw"], rr["source_type_raw"],
-                rr["note_raw"], rr["organology_raw"],
+                z, rr.get("composer_raw",""), rr.get("title_raw",""),
+                rr.get("instr_rism_main_raw",""), rr.get("instr_rism_alt_raw",""), rr.get("instr_catalogs_raw",""),
+                rr.get("library_raw",""), rr.get("shelfmark_raw",""),
+                rr.get("music_type_raw",""), rr.get("source_type_raw",""),
+                rr.get("note_raw",""), rr.get("organology_raw",""),
+                # RISM text fields (indexable)
+                rr.get("rism_date_raw",""), rr.get("rism_holdings_raw",""),
             ])
         search_blob = " ".join([p for p in search_blob_parts if p]).replace("\n", " ")
-        music_types_set = sorted({records[z]["music_type_raw"] for z in ids if records[z]["music_type_raw"]})
-        source_types_set = sorted({records[z]["source_type_raw"] for z in ids if records[z]["source_type_raw"]})
+        music_types_set = sorted({records[z]["music_type_raw"] for z in ids if records[z].get("music_type_raw")})
+        source_types_set = sorted({records[z]["source_type_raw"] for z in ids if records[z].get("source_type_raw")})
         instr_blob = " ".join(
-            ((records[z]["instr_rism_main_raw"] + " " + records[z]["instr_rism_alt_raw"] + " " + records[z]["instr_catalogs_raw"]).strip())
+            ((records[z].get("instr_rism_main_raw","") + " " + records[z].get("instr_rism_alt_raw","") + " " + records[z].get("instr_catalogs_raw","")).strip())
             for z in ids
         ).replace("\n", " ")
 
-        # NEW: all composers in this group (for smart collection filtering)
+        # all composers in this group (for smart composer filtering)
         composers_set = sorted(
             {records[z].get("composer_raw", "") for z in ids if records[z].get("composer_raw", "")},
             key=lambda x: x.lower()
         )
         composers_blob = "||".join(composers_set)
 
-        # Search Tool scenarios blob for this group (union across pieces)
-        scenario_keys = []
-        seen_sc = set()
+        # Search Tool scenarios per piece (collection intelligent)
+        piece_chunks = []
         for z in ids:
             rr = records[z]
-            for sc in (rr.get("search_scenarios") or []):
+            scs = rr.get("search_scenarios") or []
+            sc_keys = []
+            seen_sc = set()
+            for sc in scs:
                 key = "|".join(f"{k}={v}" for k, v in sorted(sc.items()))
                 if key and key not in seen_sc:
                     seen_sc.add(key)
-                    scenario_keys.append(key)
-        stool_blob = "||".join(scenario_keys)
+                    sc_keys.append(key)
+            piece_chunks.append(f"{z}@@{'||'.join(sc_keys)}")
+        stool_pieces_blob = "##".join(piece_chunks)
+
+        # Year ranges per piece (collection intelligent)
+        yr_chunks = []
+        for z in ids:
+            rr = records[z]
+            ymin = rr.get("year_min", None)
+            ymax = rr.get("year_max", None)
+            if ymin is None or ymax is None:
+                yr_chunks.append(f"{z}@@")
+            else:
+                yr_chunks.append(f"{z}@@{ymin}:{ymax}")
+        yr_pieces_blob = "##".join(yr_chunks)
 
         open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
 
@@ -1575,11 +1810,12 @@ def main():
       data-music-types="{escape_attr('||'.join(music_types_set))}"
       data-source-types="{escape_attr('||'.join(source_types_set))}"
       data-instr="{escape_attr(instr_blob)}"
-      data-stool="{escape_attr(stool_blob)}">
+      data-stool-pieces="{escape_attr(stool_pieces_blob)}"
+      data-yr-pieces="{escape_attr(yr_pieces_blob)}">
       <summary>
         <div class="entry-main">
           <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
-          <div class="entry-composer">{hrec['composer'] or ''}</div>
+          <div class="entry-composer">{composer_line}</div>
           <div class="entry-tags">{''.join(tags_html)}</div>
         </div>
         <div class="entry-arrow">›</div>
@@ -1594,405 +1830,6 @@ def main():
     """)
 
     entries_html = "\n".join(group_html_parts)
-
-    # (Local override is fine even if a global index_template exists)
-    index_template = """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>ZinkNET — Interactive catalogue</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-@@HEADER@@
-<main class="shell">
-  <div class="layout">
-    <section class="card">
-      <h2>Search & filters</h2>
-      <div class="filters">
-        <div class="filters-row">
-          <div>
-            <label for="searchInput">Global search</label>
-            <input id="searchInput" type="text" placeholder="Composer, title, number, library…" />
-          </div>
-
-          <!-- NEW: Composer finder (raw dropdown, token search; exact filter on selection) -->
-          <div>
-            <label for="composerInput">Composer (type to find, click to filter)</label>
-            <input id="composerInput" type="text" placeholder="Type: von, hessen, moritz…" autocomplete="off" />
-            <div id="composerDropdown" style="display:none; margin-top:6px; border:1px solid var(--border-subtle); background:#fff; border-radius:12px; overflow:hidden; max-height:240px; overflow-y:auto;"></div>
-            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
-              <button id="composerClear" type="button" class="tag" style="cursor:pointer;">Clear composer</button>
-              <span id="composerActive" class="tag tag-conc" style="display:none;"></span>
-            </div>
-          </div>
-
-          <div>
-            <label for="instrInput">Search in instrumentations</label>
-            <input id="instrInput" type="text" placeholder="e.g. cnto, cornettino, trb…" />
-          </div>
-
-          <!-- Search Tool builder -->
-          <div>
-            <label>Instrumentation Search Builder</label>
-            <div class="filter-inline" style="gap:6px;">
-              <select id="stMode">
-                <option value="include">Include</option>
-                <option value="exclude">Exclude</option>
-              </select>
-
-              <select id="stInstr">
-                <option value="">Select instrument…</option>
-              </select>
-
-              <select id="stCmp">
-                <option value="atleast">≥</option>
-                <option value="exact">=</option>
-              </select>
-
-              <select id="stQty">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-              </select>
-
-              <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
-              <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
-            </div>
-            <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
-          </div>
-
-          <div>
-            <label>Music type & source</label>
-            <div class="filter-inline">
-              <select id="musicFilter"><option value="">All music types</option></select>
-              <select id="sourceFilter"><option value="">All sources</option></select>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Catalogue</h2>
-      <div id="entries" class="entries">
-@@ENTRIES@@
-      </div>
-      <div id="noResults" class="no-results" style="display:none;">
-        No results for these filters.
-      </div>
-    </section>
-  </div>
-</main>
-
-<script>
-  const searchInput = document.getElementById('searchInput');
-  const instrInput = document.getElementById('instrInput');
-  const musicFilter = document.getElementById('musicFilter');
-  const sourceFilter = document.getElementById('sourceFilter');
-  const entriesContainer = document.getElementById('entries');
-  const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
-  const noResults = document.getElementById('noResults');
-
-  function normalize(s){
-    return (s || '').toLowerCase();
-  }
-  function normFold(s){
-    // light diacritics fold (safe on modern browsers)
-    try { return (s || '').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,''); }
-    catch(e){ return (s || '').toLowerCase(); }
-  }
-
-  // -------------------------
-  // Composer dropdown (token search, exact filter on selection)
-  // -------------------------
-  const composerInput = document.getElementById('composerInput');
-  const composerDropdown = document.getElementById('composerDropdown');
-  const composerClear = document.getElementById('composerClear');
-  const composerActive = document.getElementById('composerActive');
-
-  const COMPOSERS = @@COMPOSERS@@;
-  const composerIndex = COMPOSERS.map(name => {
-    const low = normFold(name);
-    const tokens = low.replace(/[\\.,;:()\\[\\]{}<>\\/\\\\\\-_]+/g,' ').split(/\\s+/).filter(Boolean);
-    return { name, low, tokens };
-  });
-
-  let composerSelected = ""; // exact raw value, only set by clicking a suggestion
-
-  function renderComposerDropdown(){
-    const q = normFold(composerInput.value).trim();
-    if(!q){
-      composerDropdown.style.display = 'none';
-      composerDropdown.innerHTML = '';
-      return;
-    }
-    const terms = q.split(/\\s+/).filter(Boolean);
-    const matches = composerIndex.filter(e => {
-      return terms.every(t => e.low.includes(t) || e.tokens.some(tok => tok.includes(t)));
-    });
-
-    matches.sort((a,b) => {
-      const ai = a.low.indexOf(terms[0]);
-      const bi = b.low.indexOf(terms[0]);
-      if(ai !== bi) return ai - bi;
-      return a.low.localeCompare(b.low);
-    });
-
-    const top = matches.slice(0, 24);
-    composerDropdown.innerHTML = '';
-    top.forEach(e => {
-      const row = document.createElement('div');
-      row.textContent = e.name;
-      row.style.padding = '8px 10px';
-      row.style.cursor = 'pointer';
-      row.style.borderTop = '1px solid rgba(208,213,235,0.7)';
-      row.addEventListener('mouseenter', () => row.style.background = 'rgba(35,75,184,0.06)');
-      row.addEventListener('mouseleave', () => row.style.background = '#fff');
-      row.addEventListener('click', () => {
-        composerSelected = e.name;        // EXACT
-        composerInput.value = e.name;     // show raw label as stored
-        composerDropdown.style.display = 'none';
-        composerDropdown.innerHTML = '';
-        composerActive.style.display = '';
-        composerActive.textContent = 'Composer: ' + composerSelected + ' ×';
-        applyFilters();
-      });
-      composerDropdown.appendChild(row);
-    });
-
-    composerDropdown.style.display = top.length ? '' : 'none';
-  }
-
-  composerInput.addEventListener('input', () => {
-    // If user edits after selecting, we drop the exact filter (until they click again)
-    if(composerSelected && composerInput.value !== composerSelected){
-      composerSelected = "";
-      composerActive.style.display = 'none';
-      composerActive.textContent = '';
-      applyFilters();
-    }
-    renderComposerDropdown();
-  });
-
-  composerInput.addEventListener('blur', () => {
-    // allow click on dropdown (small delay)
-    setTimeout(() => { composerDropdown.style.display = 'none'; }, 180);
-  });
-
-  composerClear.addEventListener('click', () => {
-    composerSelected = "";
-    composerInput.value = "";
-    composerDropdown.style.display = 'none';
-    composerDropdown.innerHTML = '';
-    composerActive.style.display = 'none';
-    composerActive.textContent = '';
-    applyFilters();
-  });
-
-  composerActive.addEventListener('click', () => {
-    // clicking the chip clears
-    composerClear.click();
-  });
-
-  // -------------------------
-  // Search Tool builder
-  // -------------------------
-  const stMode  = document.getElementById('stMode');
-  const stInstr = document.getElementById('stInstr');
-  const stCmp   = document.getElementById('stCmp');
-  const stQty   = document.getElementById('stQty');
-  const stAdd   = document.getElementById('stAdd');
-  const stClear = document.getElementById('stClear');
-  const stActive = document.getElementById('stActive');
-
-  // injected by Python: [{k:"cnto", n:123}, ...]
-  const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
-  const stRules = []; // {mode:"include"|"exclude", k:"cnto", cmp:"atleast"|"exact", n:3}
-
-  SEARCH_TOOL_INSTRS.forEach(o => {
-    const opt = document.createElement('option');
-    opt.value = o.k;
-    opt.textContent = `${o.k} (${o.n})`;
-    stInstr.appendChild(opt);
-  });
-
-  function renderStRules(){
-    stActive.innerHTML = '';
-    stRules.forEach((r, idx) => {
-      const chip = document.createElement('span');
-      chip.className = 'tag tag-conc';
-      chip.style.cursor = 'pointer';
-      const sign = r.mode === 'include' ? '+' : '–';
-      const cmpSymbol = r.cmp === 'exact' ? '=' : '≥';
-      chip.textContent = `${sign} ${r.k} ${cmpSymbol} ${r.n}  ×`;
-      chip.title = 'Click to remove';
-      chip.addEventListener('click', () => {
-        stRules.splice(idx, 1);
-        renderStRules();
-        applyFilters();
-      });
-      stActive.appendChild(chip);
-    });
-  }
-
-  stAdd.addEventListener('click', () => {
-    const k = stInstr.value;
-    const n = parseInt(stQty.value || '1', 10);
-    const mode = stMode.value;
-    const cmp = stCmp.value;
-    if(!k) return;
-    stRules.push({mode, k, cmp, n});
-    renderStRules();
-    applyFilters();
-  });
-
-  stClear.addEventListener('click', () => {
-    stRules.length = 0;
-    renderStRules();
-    applyFilters();
-  });
-
-  function parseScenarios(card){
-    if(card.__stScenarios) return card.__stScenarios;
-    const raw = card.dataset.stool || '';
-    const scenarios = [];
-    if(raw){
-      raw.split('||').forEach(scStr => {
-        const sc = {};
-        if(!scStr) return;
-        scStr.split('|').forEach(pair => {
-          const parts = pair.split('=');
-          if(parts.length !== 2) return;
-          const k = parts[0];
-          const v = parts[1];
-          if(k && v) sc[k] = parseInt(v,10) || 0;
-        });
-        scenarios.push(sc);
-      });
-    }
-    card.__stScenarios = scenarios;
-    return scenarios;
-  }
-
-  function matchesSearchTool(card){
-    if(!stRules.length) return true;
-    const scs = parseScenarios(card);
-    if(!scs.length) return false;
-
-    return scs.some(sc => {
-      for(const r of stRules){
-        const val = sc[r.k] || 0;
-
-        // include
-        if(r.mode === 'include'){
-          if(r.cmp === 'exact'){
-            if(val !== r.n) return false;
-          }else{
-            if(val < r.n) return false;
-          }
-        }
-        // exclude
-        else{
-          if(r.cmp === 'exact'){
-            if(val === r.n) return false;
-          }else{
-            if(val >= r.n) return false;
-          }
-        }
-      }
-      return true;
-    });
-  }
-
-  // -------------------------
-  // Populate Music/Source filters
-  // -------------------------
-  const musicSet = new Set();
-  const sourceSet = new Set();
-  cards.forEach(card => {
-    (card.dataset.musicTypes || '').split('||').filter(Boolean).forEach(v => musicSet.add(v));
-    (card.dataset.sourceTypes || '').split('||').filter(Boolean).forEach(v => sourceSet.add(v));
-  });
-  Array.from(musicSet).sort().forEach(v => {
-    const o=document.createElement('option'); o.value=v; o.textContent=v; musicFilter.appendChild(o);
-  });
-  Array.from(sourceSet).sort().forEach(v => {
-    const o=document.createElement('option'); o.value=v; o.textContent=v; sourceFilter.appendChild(o);
-  });
-
-  // -------------------------
-  // Smart: if a composer is selected, filter Contents lines inside collections
-  // -------------------------
-  function filterCollectionContents(card){
-    const lines = Array.from(card.querySelectorAll('.subpiece-line'));
-    if(!lines.length) return;
-
-    if(!composerSelected){
-      lines.forEach(l => l.style.display = '');
-      return;
-    }
-    lines.forEach(l => {
-      const c = l.dataset.composerRaw || '';
-      l.style.display = (c === composerSelected) ? '' : 'none';
-    });
-  }
-
-  function applyFilters() {
-    const q  = normalize(searchInput.value);
-    const qi = normalize(instrInput.value);
-    const mt = musicFilter.value;
-    const st = sourceFilter.value;
-
-    let visible = 0;
-
-    cards.forEach(card => {
-      const text  = normalize(card.dataset.search);
-      const instr = normalize(card.dataset.instr);
-      const mts = (card.dataset.musicTypes || '').split('||').filter(Boolean);
-      const sts = (card.dataset.sourceTypes || '').split('||').filter(Boolean);
-
-      let ok = true;
-      if (q  && !text.includes(q)) ok = false;
-      if (qi && !instr.includes(qi)) ok = false;
-      if (mt && !mts.includes(mt)) ok = false;
-      if (st && !sts.includes(st)) ok = false;
-
-      // Search Tool builder
-      if (ok && !matchesSearchTool(card)) ok = false;
-
-      // Composer exact filter (SMART collections: checks all composers in group)
-      if(ok && composerSelected){
-        const clist = (card.dataset.composers || '').split('||').filter(Boolean);
-        if(!clist.includes(composerSelected)) ok = false;
-      }
-
-      card.style.display = ok ? '' : 'none';
-      if (ok){
-        visible++;
-        filterCollectionContents(card);
-      }
-    });
-
-    noResults.style.display = visible ? 'none' : '';
-  }
-
-  searchInput.addEventListener('input', applyFilters);
-  instrInput.addEventListener('input', applyFilters);
-  musicFilter.addEventListener('change', applyFilters);
-  sourceFilter.addEventListener('change', applyFilters);
-</script>
-</body>
-</html>
-"""
 
     (OUT_DIR / "index.html").write_text(
         index_template
@@ -2024,13 +1861,17 @@ def main():
             parent_btn = f'<div style="margin:8px 0 12px;"><a class="tag tag-count" href="piece-{parent_id.replace("/","-")}.html" target="_blank" rel="noopener">Open collection</a></div>'
 
         tags = []
-        if rec["music_type_raw"]:
+        if rec.get("music_type_raw"):
             tags.append(f'<span class="tag tag-type">{escape_textnode(rec["music_type_raw"])}</span>')
-        if rec["source_type_raw"]:
+        if rec.get("source_type_raw"):
             tags.append(f'<span class="tag tag-source">{escape_textnode(rec["source_type_raw"])}</span>')
-        if rec["concordances_ids"]:
+        if rec.get("concordances_ids"):
             n = len(rec["concordances_ids"])
             tags.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
+
+        # RISM date chip (detail)
+        if clean_str(rec.get("rism_date_raw","")):
+            tags.append(f'<span class="tag tag-rismdate">{escape_textnode(rec["rism_date_raw"])}</span>')
 
         self_link = norm_url(rec.get("rism_link_raw",""))
         coll_link = norm_url(parent_rec.get("rism_link_raw","")) if parent_rec else ""
@@ -2049,12 +1890,12 @@ def main():
         instr_block = "" if rec["indiv_coll"] == "VirtualColl" else build_instr_block_for_record(rec, include_catalogs=True)
 
         meta_bits = []
-        if rec["indiv_coll"] != "VirtualColl" and rec["composer"]:
+        if rec["indiv_coll"] != "VirtualColl" and rec.get("composer"):
             meta_bits.append(f'<div class="meta-block"><span class="label">Composer</span><span class="value">{rec["composer"]}</span></div>')
 
-        lib_val = rec["library"]
-        shelf_val = rec["shelfmark"]
-        if rec["see_rism"]:
+        lib_val = rec.get("library", "")
+        shelf_val = rec.get("shelfmark", "")
+        if rec.get("see_rism"):
             if lib_val: lib_val += " "
             lib_val += '<span class="see-rism-tag">See RISM</span>'
             if shelf_val: shelf_val += " "
@@ -2067,19 +1908,61 @@ def main():
 
         meta_html = "".join(meta_bits)
 
-        biblio_html = f'<div class="piece-notes"><div class="label">Bibliography:</div><div class="value">{rec["bibliography"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["bibliography"]) else ""
-        note_html = f'<div class="piece-notes"><div class="label">Note:</div><div class="value">{rec["note"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["note"]) else ""
-        org_html = f'<div class="piece-notes"><div class="label">Organology:</div><div class="value">{rec["organology"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["organology"]) else ""
+        # RISM drawer (variant B-style)
+        rism_drawer = ""
+        rism_date = clean_str(rec.get("rism_date_raw",""))
+        rism_holdings = clean_str(rec.get("rism_holdings_raw",""))
+        rism_holdings_count = len(holdings_lines(rism_holdings))
+
+        if rism_date or rism_holdings:
+            open_attr = " open" if rism_holdings else ""
+            pills = []
+            if rism_date:
+                pills.append(f'<span class="pill">Date: {escape_textnode(rism_date)}</span>')
+            if rism_holdings_count:
+                pills.append(f'<span class="pill" style="opacity:.9;">Holdings: {rism_holdings_count}</span>')
+            pills_html = "".join(pills)
+
+            holdings_html = holdings_list_html(rism_holdings)
+            if holdings_html:
+                holdings_html = f"""
+          <div>
+            <div class="rism-hint" style="margin-bottom:6px;">RISM Holdings (one line per institution):</div>
+            {holdings_html}
+          </div>"""
+
+            rism_drawer = f"""
+    <details class="rism"{open_attr}>
+      <summary>
+        <div class="rism-left">
+          <span class="rism-title">RISM data</span>
+          <div class="rism-mini">{pills_html}</div>
+        </div>
+        <span class="tag tag-rism" style="opacity:.85;">open/close</span>
+      </summary>
+      <div class="rism-body">
+        <div class="rism-hint">RISM has priority over manual data when overlapping.</div>
+        <div class="rism-kv">
+          <div class="k">RISM Date (text)</div><div class="v">{escape_textnode(rism_date) if rism_date else ''}</div>
+        </div>
+        {holdings_html}
+      </div>
+    </details>
+"""
+
+        biblio_html = f'<div class="piece-notes"><div class="label">Bibliography:</div><div class="value">{rec["bibliography"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec.get("bibliography")) else ""
+        note_html = f'<div class="piece-notes"><div class="label">Note:</div><div class="value">{rec["note"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec.get("note")) else ""
+        org_html = f'<div class="piece-notes"><div class="label">Organology:</div><div class="value">{rec["organology"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec.get("organology")) else ""
 
         conc_html = ""
-        if rec["indiv_coll"] != "VirtualColl" and rec["concordances_ids"]:
+        if rec["indiv_coll"] != "VirtualColl" and rec.get("concordances_ids"):
             cards_html = []
             for cid in rec["concordances_ids"]:
                 cr = records.get(cid)
                 if not cr:
                     continue
-                mt = cr["music_type_raw"]
-                st = cr["source_type_raw"]
+                mt = cr.get("music_type_raw","")
+                st = cr.get("source_type_raw","")
                 mt_tag = f'<span class="tag tag-type">{escape_textnode(mt)}</span>' if mt else ""
                 st_tag = f'<span class="tag tag-source">{escape_textnode(st)}</span>' if st else ""
                 rchip = rism_chip_self(cr, used_links_page)
@@ -2113,7 +1996,7 @@ def main():
                 sub_instr = "" if pr["indiv_coll"] == "VirtualColl" else build_instr_block_for_record(pr, include_catalogs=True)
 
                 sub_conc = ""
-                if pr["concordances_ids"]:
+                if pr.get("concordances_ids"):
                     n = len(pr["concordances_ids"])
                     sub_conc = f'<div class="sub-entry-conc"><span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span></div>'
 
@@ -2144,7 +2027,7 @@ def main():
       {''.join(sub_entries)}
     </div>"""
 
-        title_full = f"{zid} — {rec['title_raw'] or '(Untitled)'}"
+        title_full = f"{zid} — {rec.get('title_raw') or '(Untitled)'}"
         page_html = (
             detail_template
             .replace("@@TITLE_FULL@@", html.escape(title_full, quote=False))
@@ -2157,6 +2040,7 @@ def main():
             .replace("@@TAGS@@", tags_html)
             .replace("@@INSTR@@", instr_block)
             .replace("@@META@@", meta_html)
+            .replace("@@RISM_DRAWER@@", rism_drawer)
             .replace("@@BIBLIO@@", biblio_html)
             .replace("@@NOTE@@", note_html)
             .replace("@@ORG@@", org_html)
