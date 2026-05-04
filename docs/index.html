@@ -69528,9 +69528,55 @@
   const instrInput = document.getElementById('instrInput');
   const yearFrom = document.getElementById('yearFrom');
   const yearTo = document.getElementById('yearTo');
-  const musicFilter = document.getElementById('musicFilter');
-  const sourceFilter = document.getElementById('sourceFilter');
-  const entriesContainer = document.getElementById('entries');
+const musicFilter = document.getElementById('musicFilter');
+const sourceFilter = document.getElementById('sourceFilter');
+
+/* Clear all filters button — injected by JS to avoid editing the HTML form */
+const clearAllFilters = document.createElement('button');
+clearAllFilters.id = 'clearAllFilters';
+clearAllFilters.type = 'button';
+clearAllFilters.className = 'tag';
+clearAllFilters.textContent = 'Clear all filters';
+clearAllFilters.style.cursor = 'pointer';
+clearAllFilters.style.width = '100%';
+clearAllFilters.style.padding = '7px 11px';
+
+const clearAllWrap = document.createElement('div');
+clearAllWrap.appendChild(clearAllFilters);
+
+const sourceInline = sourceFilter.closest('.filter-inline');
+const sourceBlock = sourceInline ? sourceInline.parentElement : null;
+if (sourceBlock && sourceBlock.parentElement) {
+  sourceBlock.insertAdjacentElement('afterend', clearAllWrap);
+}
+
+function clearAllFiltersFn() {
+  searchInput.value = '';
+
+  composerInput.value = '';
+  composerSelected = '';
+  closeComposerMenu();
+
+  instrInput.value = '';
+  yearFrom.value = '';
+  yearTo.value = '';
+
+  musicFilter.value = '';
+  sourceFilter.value = '';
+
+  stRules.length = 0;
+  renderStRules();
+
+  cards.forEach(card => {
+    applyCollectionView(card, null);
+  });
+
+  applyFilters();
+}
+
+clearAllFilters.addEventListener('click', clearAllFiltersFn);
+
+const entriesContainer = document.getElementById('entries');
   const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
   const noResults = document.getElementById('noResults');
 
@@ -69618,7 +69664,7 @@
   const stActive = document.getElementById('stActive');
 
   // injected by Python: [{k:"cnto", n:123}, ...]
-  const SEARCH_TOOL_INSTRS = [{"k": "A", "n": 2092}, {"k": "a", "n": 60}, {"k": "arp", "n": 38}, {"k": "b", "n": 126}, {"k": "B", "n": 2146}, {"k": "Bariton", "n": 1}, {"k": "bassetto", "n": 1}, {"k": "bc", "n": 1051}, {"k": "bombarde", "n": 78}, {"k": "cemb", "n": 43}, {"k": "cetra", "n": 14}, {"k": "ciaramella", "n": 5}, {"k": "cimb", "n": 1}, {"k": "cl", "n": 4}, {"k": "clno", "n": 2}, {"k": "cnto", "n": 2707}, {"k": "cnto muto", "n": 48}, {"k": "colascione", "n": 5}, {"k": "cor", "n": 10}, {"k": "cor da caccia", "n": 3}, {"k": "cor di bassetto", "n": 2}, {"k": "cornettino", "n": 273}, {"k": "crummhorn", "n": 7}, {"k": "fag", "n": 1254}, {"k": "fag.picc", "n": 2}, {"k": "fiffaro", "n": 16}, {"k": "fl", "n": 148}, {"k": "i", "n": 28}, {"k": "lira", "n": 5}, {"k": "lirone", "n": 12}, {"k": "lituus", "n": 2}, {"k": "lute", "n": 109}, {"k": "mandoline", "n": 3}, {"k": "ob", "n": 86}, {"k": "org", "n": 1627}, {"k": "pf", "n": 1}, {"k": "pipe and tabor", "n": 1}, {"k": "positif", "n": 55}, {"k": "recorder", "n": 1}, {"k": "regal", "n": 10}, {"k": "ribecchino", "n": 1}, {"k": "s", "n": 66}, {"k": "S", "n": 2251}, {"k": "salterio", "n": 3}, {"k": "schryari", "n": 3}, {"k": "serpent", "n": 2}, {"k": "Sinf vl", "n": 1}, {"k": "sordun", "n": 1}, {"k": "spinetta", "n": 5}, {"k": "strings", "n": 4}, {"k": "T", "n": 2174}, {"k": "t", "n": 63}, {"k": "tab", "n": 1}, {"k": "tamb", "n": 2}, {"k": "tb", "n": 2}, {"k": "tenorete", "n": 1}, {"k": "theorbe", "n": 184}, {"k": "timp", "n": 255}, {"k": "tr", "n": 532}, {"k": "trb", "n": 2308}, {"k": "V", "n": 73}, {"k": "V 5", "n": 4}, {"k": "violetta", "n": 102}, {"k": "vl", "n": 2252}, {"k": "vla", "n": 957}, {"k": "vla da gamba", "n": 73}, {"k": "vlc", "n": 695}, {"k": "vlne", "n": 1370}];
+  const SEARCH_TOOL_INSTRS = [{"k": "a", "n": 60}, {"k": "A", "n": 2092}, {"k": "arp", "n": 38}, {"k": "B", "n": 2146}, {"k": "b", "n": 126}, {"k": "Bariton", "n": 1}, {"k": "bassetto", "n": 1}, {"k": "bc", "n": 1051}, {"k": "bombarde", "n": 78}, {"k": "cemb", "n": 43}, {"k": "cetra", "n": 14}, {"k": "ciaramella", "n": 5}, {"k": "cimb", "n": 1}, {"k": "cl", "n": 4}, {"k": "clno", "n": 2}, {"k": "cnto", "n": 2707}, {"k": "cnto muto", "n": 48}, {"k": "colascione", "n": 5}, {"k": "cor", "n": 10}, {"k": "cor da caccia", "n": 3}, {"k": "cor di bassetto", "n": 2}, {"k": "cornettino", "n": 273}, {"k": "crummhorn", "n": 7}, {"k": "fag", "n": 1254}, {"k": "fag.picc", "n": 2}, {"k": "fiffaro", "n": 16}, {"k": "fl", "n": 148}, {"k": "i", "n": 28}, {"k": "lira", "n": 5}, {"k": "lirone", "n": 12}, {"k": "lituus", "n": 2}, {"k": "lute", "n": 109}, {"k": "mandoline", "n": 3}, {"k": "ob", "n": 86}, {"k": "org", "n": 1627}, {"k": "pf", "n": 1}, {"k": "pipe and tabor", "n": 1}, {"k": "positif", "n": 55}, {"k": "recorder", "n": 1}, {"k": "regal", "n": 10}, {"k": "ribecchino", "n": 1}, {"k": "S", "n": 2251}, {"k": "s", "n": 66}, {"k": "salterio", "n": 3}, {"k": "schryari", "n": 3}, {"k": "serpent", "n": 2}, {"k": "Sinf vl", "n": 1}, {"k": "sordun", "n": 1}, {"k": "spinetta", "n": 5}, {"k": "strings", "n": 4}, {"k": "t", "n": 63}, {"k": "T", "n": 2174}, {"k": "tab", "n": 1}, {"k": "tamb", "n": 2}, {"k": "tb", "n": 2}, {"k": "tenorete", "n": 1}, {"k": "theorbe", "n": 184}, {"k": "timp", "n": 255}, {"k": "tr", "n": 532}, {"k": "trb", "n": 2308}, {"k": "V", "n": 73}, {"k": "V 5", "n": 4}, {"k": "violetta", "n": 102}, {"k": "vl", "n": 2252}, {"k": "vla", "n": 957}, {"k": "vla da gamba", "n": 73}, {"k": "vlc", "n": 695}, {"k": "vlne", "n": 1370}];
   const stRules = []; // {mode:"include"|"exclude", cmp:"ge"|"eq", k:"cnto", n:3}
 
   SEARCH_TOOL_INSTRS.forEach(o => {
