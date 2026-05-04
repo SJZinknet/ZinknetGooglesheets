@@ -345,11 +345,6 @@ def parse_search_tool_to_scenarios(text, limit=256):
                 ch = _parse_choice_block(seg)
                 if ch:
                     choices.append(ch)
-            else:
-                it = _parse_item_token(seg)
-                if it:
-                    name, qty = it
-                    base[name] = base.get(name, 0) + qty
         scenarios = _expand_choices(base, choices, limit=limit)
 
     seen = set()
