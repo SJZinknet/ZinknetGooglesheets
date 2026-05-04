@@ -1833,9 +1833,29 @@ def main():
             piece_chunks.append(f"{z}@@{'||'.join(sc_keys)}")
         stool_pieces_blob = "##".join(piece_chunks)
 
-        # per-piece Year ranges (only pieces that appear as lines)
+        # per-piece Year ranges
+        # For collections, include BOTH:
+        # - the collection/header date (x/0), if present
+        # - the dates of the individual pieces (x/1, x/2, ...)
+        #
+        # This fixes cases like A-1069/0 where the RISM date belongs to
+        # the collection notice itself and not to the individual pieces.
         yr_chunks = []
-        for z in line_ids if (coll_id or is_virtual_collection) else [header_id]:
+
+        if coll_id or is_virtual_collection:
+            year_ids = list(line_ids)
+
+            # Add collection/header date as a synthetic match.
+            # "__HEADER__" is not displayed as a subpiece, but it lets
+            # the collection card match the chronology filter.
+            hymin = hrec.get("year_min", None)
+            hymax = hrec.get("year_max", None)
+            if hymin is not None and hymax is not None:
+                yr_chunks.append(f"__HEADER__@@{hymin}:{hymax}")
+        else:
+            year_ids = [header_id]
+
+        for z in year_ids:
             rr = records[z]
             ymin = rr.get("year_min", None)
             ymax = rr.get("year_max", None)
@@ -1843,6 +1863,7 @@ def main():
                 yr_chunks.append(f"{z}@@")
             else:
                 yr_chunks.append(f"{z}@@{ymin}:{ymax}")
+
         yr_pieces_blob = "##".join(yr_chunks)
 
         open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
