@@ -159,19 +159,23 @@ def format_uniform_instr(raw_text, alternative=False):
     return f'<strong class="instr-label">{heading}</strong><div class="instr-content">{body}</div>'
 
 def parse_zinknet(no):
+    """
+    Sort by numeric part first, then subnumber, then prefix as tie-breaker.
+    """
     s = clean_str(no)
     if not s:
-        return (10**9, 10**9)
-    if "/" in s:
-        a, b = s.split("/", 1)
-        try:
-            return (int(a), int(b))
-        except ValueError:
-            return (10**9, 10**9)
-    try:
-        return (int(s), 0)
-    except ValueError:
-        return (10**9, 10**9)
+        return (10**9, 10**9, "")
+
+    prefix_match = re.match(r"\s*([A-Za-z]+)\s*[-–—]\s*", s)
+    prefix = prefix_match.group(1).upper() if prefix_match else ""
+
+    m = re.search(r"(\d+)(?:\s*/\s*(\d+))?", s)
+    if not m:
+        return (10**9, 10**9, prefix)
+
+    main = int(m.group(1))
+    sub = int(m.group(2)) if m.group(2) is not None else 0
+    return (main, sub, prefix)
 
 def group_id(no):
     s = clean_str(no)
