@@ -1020,9 +1020,55 @@ index_template = """<!doctype html>
   const instrInput = document.getElementById('instrInput');
   const yearFrom = document.getElementById('yearFrom');
   const yearTo = document.getElementById('yearTo');
-  const musicFilter = document.getElementById('musicFilter');
-  const sourceFilter = document.getElementById('sourceFilter');
-  const entriesContainer = document.getElementById('entries');
+const musicFilter = document.getElementById('musicFilter');
+const sourceFilter = document.getElementById('sourceFilter');
+
+/* Clear all filters button — injected by JS to avoid editing the HTML form */
+const clearAllFilters = document.createElement('button');
+clearAllFilters.id = 'clearAllFilters';
+clearAllFilters.type = 'button';
+clearAllFilters.className = 'tag';
+clearAllFilters.textContent = 'Clear all filters';
+clearAllFilters.style.cursor = 'pointer';
+clearAllFilters.style.width = '100%';
+clearAllFilters.style.padding = '7px 11px';
+
+const clearAllWrap = document.createElement('div');
+clearAllWrap.appendChild(clearAllFilters);
+
+const sourceInline = sourceFilter.closest('.filter-inline');
+const sourceBlock = sourceInline ? sourceInline.parentElement : null;
+if (sourceBlock && sourceBlock.parentElement) {
+  sourceBlock.insertAdjacentElement('afterend', clearAllWrap);
+}
+
+function clearAllFiltersFn() {
+  searchInput.value = '';
+
+  composerInput.value = '';
+  composerSelected = '';
+  closeComposerMenu();
+
+  instrInput.value = '';
+  yearFrom.value = '';
+  yearTo.value = '';
+
+  musicFilter.value = '';
+  sourceFilter.value = '';
+
+  stRules.length = 0;
+  renderStRules();
+
+  cards.forEach(card => {
+    applyCollectionView(card, null);
+  });
+
+  applyFilters();
+}
+
+clearAllFilters.addEventListener('click', clearAllFiltersFn);
+
+const entriesContainer = document.getElementById('entries');
   const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
   const noResults = document.getElementById('noResults');
 
