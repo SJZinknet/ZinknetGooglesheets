@@ -178,11 +178,9 @@ def parse_zinknet(no):
     if not s:
         return (10**9, 10**9, 10**9, "")
 
-    # Prefix before dash: A-682, B-12, etc.
     pm = re.match(r"^\s*([A-Za-z]+)\s*[-–—]\s*", s)
     prefix = pm.group(1).upper() if pm else ""
 
-    # Convert prefix to batch rank: A=1, B=2, C=3...
     if prefix:
         batch_rank = 0
         for ch in prefix:
@@ -192,9 +190,8 @@ def parse_zinknet(no):
                 batch_rank = 10**6
                 break
     else:
-        batch_rank = 10**6  # unprefixed entries after A/B/C batches
+        batch_rank = 10**6
 
-    # Numeric part and optional /subnumber
     m = re.search(r"(\d+)(?:\s*/\s*(\d+))?", s)
     if not m:
         return (batch_rank, 10**9, 10**9, s)
@@ -235,11 +232,70 @@ def norm_music_type(s):
 
     return t
 
+def source_categories_for_filter(raw):
+    """
+    Simple source categories for user-facing filtering:
+      Ms.*  -> Manuscript
+      Print -> Print
+      Txt   -> Text
+    """
+    s = clean_str(raw)
+    if not s:
+        return set()
+
+    low = s.lower().strip()
+
+    if low == "txt" or low.startswith("txt"):
+        return {"Text"}
+    if "print" in low:
+        return {"Print"}
+    if "ms" in low:
+        return {"Manuscript"}
+
+    return {s}
+
+def manuscript_details_for_filter(raw):
+    """
+    Contextual manuscript details.
+    Only manuscript-related details are returned.
+    Print and Txt are intentionally omitted.
+
+    Rules:
+      Ms.                         -> Ms.
+      Ms. Autograph               -> Ms. Autograph
+      Ms. Autograph (partial)     -> Ms. Autograph
+      Ms. Autograph (poss.)       -> Ms. Autograph
+      Ms. Copy                    -> Ms. Copy
+      Ms. Autograph ; Ms. Copy    -> Ms. Autograph + Ms. Copy
+    """
+    s = clean_str(raw)
+    if not s:
+        return set()
+
+    out = set()
+    parts = re.split(r"\s*;\s*", s)
+
+    for p in parts:
+        p = p.strip()
+        low = p.lower()
+
+        if not low:
+            continue
+        if low.startswith("print") or low.startswith("txt"):
+            continue
+        if "autograph" in low:
+            out.add("Ms. Autograph")
+        elif "copy" in low:
+            out.add("Ms. Copy")
+        elif low.startswith("ms"):
+            out.add("Ms.")
+
+    return out
+
 def norm_url(u):
     return clean_str(u).strip()
 
 def composer_tokens(raw):
-    # tokens used ONLY for dropdown suggestions; filtering is EXACT raw match
     s = clean_str(raw).lower()
     s = re.sub(r"[^a-zà-öø-ÿ\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
@@ -418,7 +474,7 @@ def rism_duo(self_chip_html, coll_chip_html):
     return self_chip_html or coll_chip_html or ""
 
 # =========================
-# HEADER (logos fixed names)
+# HEADER
 # =========================
 def build_header_html():
     def logo_img(filename, alt, cls):
@@ -608,6 +664,9 @@ h1{
   font-size:0.85rem; color:var(--text);
   outline:none; cursor:pointer;
 }
+.filters button {
+  font-family: inherit;
+}
 .filters-row { display:flex; flex-direction:column; gap:10px; }
 .filter-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .filter-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
@@ -635,7 +694,6 @@ summary::-webkit-details-marker { display:none; }
 .entry-main { display:flex; flex-direction:column; gap:3px; }
 .entry-id { font-weight:650; font-size:0.96rem; color:#020617; }
 
-/* Composer line can contain date chip */
 .entry-composer {
   font-size:0.85rem;
   color:var(--muted);
@@ -657,7 +715,6 @@ summary::-webkit-details-marker { display:none; }
 .tag-count { background: var(--green-collection-bg); border-color: var(--green-collection); color: var(--green-collection); font-weight:650; }
 .tag-conc { border:1px solid var(--border-subtle); background:#ffffff; }
 
-/* RISM mini-chip */
 .tag-rism{
   border-color: var(--violet-border);
   background: var(--violet-bg);
@@ -667,7 +724,6 @@ summary::-webkit-details-marker { display:none; }
   font-weight:650;
 }
 
-/* Elegant duo wrapper */
 .rism-duo{
   display:inline-flex;
   align-items:center;
@@ -682,7 +738,6 @@ summary::-webkit-details-marker { display:none; }
   border-radius:1px;
 }
 
-/* See RISM */
 .see-rism-tag {
   display:inline-flex; align-items:center; margin-left:6px;
   padding:2px 6px; border-radius:999px;
@@ -783,7 +838,6 @@ dd.meta-value { margin:0; }
 .piece-notes { font-size:0.88rem; margin-top:8px; }
 .piece-notes .label { font-weight:600; color:var(--muted); display:block; margin-bottom:3px; }
 
-/* Concordances cards */
 .conc-block { margin-top:14px; }
 .conc-heading { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:6px; }
 .conc-cards { display:flex; flex-direction:column; gap:6px; }
@@ -815,7 +869,6 @@ dd.meta-value { margin:0; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
 
-/* Composer dropdown menu */
 .composer-menu{
   display:none;
   position:relative;
@@ -845,7 +898,6 @@ dd.meta-value { margin:0; }
   background: rgba(35,75,184,0.06);
 }
 
-/* RISM drawer (detail pages) — simplified */
 details.rism {
   margin-top:14px;
   border:1.5px solid rgba(139,92,246,0.35);
@@ -1019,11 +1071,30 @@ index_template = """<!doctype html>
           </div>
 
           <div>
-            <label>Music type & source</label>
+            <label>Music type</label>
             <div class="filter-inline">
               <select id="musicFilter"><option value="">All music types</option></select>
-              <select id="sourceFilter"><option value="">All sources</option></select>
             </div>
+          </div>
+
+          <div>
+            <label>Source category</label>
+            <div class="filter-inline">
+              <select id="sourceFilter"><option value="">All source categories</option></select>
+            </div>
+          </div>
+
+          <div id="msDetailBlock" style="display:none;">
+            <label>Manuscript detail</label>
+            <div class="filter-inline">
+              <select id="msDetailFilter"><option value="">All manuscript details</option></select>
+            </div>
+          </div>
+
+          <div>
+            <button id="clearAllFilters" type="button" class="tag" style="cursor:pointer; width:100%; padding:7px 11px;">
+              Clear all filters
+            </button>
           </div>
 
         </div>
@@ -1051,88 +1122,40 @@ index_template = """<!doctype html>
   const instrInput = document.getElementById('instrInput');
   const yearFrom = document.getElementById('yearFrom');
   const yearTo = document.getElementById('yearTo');
-const musicFilter = document.getElementById('musicFilter');
-const sourceFilter = document.getElementById('sourceFilter');
+  const musicFilter = document.getElementById('musicFilter');
+  const sourceFilter = document.getElementById('sourceFilter');
+  const msDetailBlock = document.getElementById('msDetailBlock');
+  const msDetailFilter = document.getElementById('msDetailFilter');
+  const clearAllFilters = document.getElementById('clearAllFilters');
 
-/* Clear all filters button — injected by JS to avoid editing the HTML form */
-const clearAllFilters = document.createElement('button');
-clearAllFilters.id = 'clearAllFilters';
-clearAllFilters.type = 'button';
-clearAllFilters.className = 'tag';
-clearAllFilters.textContent = 'Clear all filters';
-clearAllFilters.style.cursor = 'pointer';
-clearAllFilters.style.width = '100%';
-clearAllFilters.style.padding = '7px 11px';
+  const entriesContainer = document.getElementById('entries');
+  const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
+  const noResults = document.getElementById('noResults');
 
-const clearAllWrap = document.createElement('div');
-clearAllWrap.appendChild(clearAllFilters);
+  const resultCount = document.createElement('div');
+  resultCount.id = 'resultCount';
+  resultCount.style.margin = '0 0 10px';
+  resultCount.style.fontSize = '0.86rem';
+  resultCount.style.color = 'var(--muted)';
+  resultCount.style.fontWeight = '600';
+  entriesContainer.insertAdjacentElement('beforebegin', resultCount);
 
-const sourceInline = sourceFilter.closest('.filter-inline');
-const sourceBlock = sourceInline ? sourceInline.parentElement : null;
-if (sourceBlock && sourceBlock.parentElement) {
-  sourceBlock.insertAdjacentElement('afterend', clearAllWrap);
-}
-
-function clearAllFiltersFn() {
-  searchInput.value = '';
-
-  composerInput.value = '';
-  composerSelected = '';
-  closeComposerMenu();
-
-  instrInput.value = '';
-  yearFrom.value = '';
-  yearTo.value = '';
-
-  musicFilter.value = '';
-  sourceFilter.value = '';
-
-  stRules.length = 0;
-  renderStRules();
-
-  cards.forEach(card => {
-    applyCollectionView(card, null);
-  });
-
-  applyFilters();
-}
-
-clearAllFilters.addEventListener('click', clearAllFiltersFn);
-
-const entriesContainer = document.getElementById('entries');
-const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
-const noResults = document.getElementById('noResults');
-
-/* Result count — injected by JS */
-const resultCount = document.createElement('div');
-resultCount.id = 'resultCount';
-resultCount.style.margin = '0 0 10px';
-resultCount.style.fontSize = '0.86rem';
-resultCount.style.color = 'var(--muted)';
-resultCount.style.fontWeight = '600';
-
-entriesContainer.insertAdjacentElement('beforebegin', resultCount);
-
-function countVisibleSubpieces(card) {
-  const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
-  if (!lines.length) return 0;
-  return lines.filter(ln => ln.style.display !== 'none').length;
-}
-
-function countAllSubpieces(card) {
-  return card.querySelectorAll('.subpiece-line[data-pid]').length;
-}
-
-function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
-  const entryWord = visibleCards === 1 ? 'entry' : 'entries';
-
-  if (pieceLevelActive) {
-    const pieceWord = matchingPieces === 1 ? 'piece' : 'pieces';
-    resultCount.textContent = `${visibleCards} catalogue ${entryWord} shown · ${matchingPieces} matching ${pieceWord}`;
-  } else {
-    resultCount.textContent = `${visibleCards} catalogue ${entryWord} shown`;
+  function countVisibleSubpieces(card) {
+    const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
+    if (!lines.length) return 0;
+    return lines.filter(ln => ln.style.display !== 'none').length;
   }
-}
+
+  function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
+    const entryWord = visibleCards === 1 ? 'entry' : 'entries';
+
+    if (pieceLevelActive) {
+      const pieceWord = matchingPieces === 1 ? 'piece' : 'pieces';
+      resultCount.textContent = `${visibleCards} catalogue ${entryWord} shown · ${matchingPieces} matching ${pieceWord}`;
+    } else {
+      resultCount.textContent = `${visibleCards} catalogue ${entryWord} shown`;
+    }
+  }
 
   function normalize(s){ return (s || '').toLowerCase(); }
   function normSpaces(s){ return (s || '').replace(/\\s+/g,' ').trim(); }
@@ -1141,19 +1164,19 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     return Number.isFinite(n) ? n : null;
   }
 
-  // ============ Composer dropdown (token suggestions + EXACT filter on click)
+  // ============ Composer dropdown
   const WORD_RE = /[A-Za-zÀ-ÖØ-öø-ÿ]+/g;
   function wordsOnly(s){ return (normalize(s).match(WORD_RE) || []); }
 
-  // injected by Python: [{d:"Hessen, Moritz von", t:"hessen moritz von"}, ...]
   const COMPOSERS = @@COMPOSERS@@;
 
-  let composerSelected = ""; // ONLY set when clicking a suggestion (exact raw)
+  let composerSelected = "";
 
   function closeComposerMenu(){
     composerMenu.style.display = 'none';
     composerList.innerHTML = '';
   }
+
   function openComposerMenu(items){
     composerList.innerHTML = '';
     items.forEach(obj => {
@@ -1161,8 +1184,8 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
       div.className = 'composer-item';
       div.textContent = obj.d;
       div.addEventListener('click', () => {
-        composerSelected = obj.d;     // EXACT raw
-        composerInput.value = obj.d;  // show raw
+        composerSelected = obj.d;
+        composerInput.value = obj.d;
         closeComposerMenu();
         applyFilters();
       });
@@ -1170,6 +1193,7 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     });
     composerMenu.style.display = items.length ? 'block' : 'none';
   }
+
   function computeComposerHits(){
     const qWords = wordsOnly(composerInput.value);
     if(!qWords.length) return [];
@@ -1189,7 +1213,6 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
   }
 
   composerInput.addEventListener('input', () => {
-    // editing after selection cancels exact filter until a click happens again
     if(composerSelected && composerInput.value !== composerSelected){
       composerSelected = "";
       applyFilters();
@@ -1198,10 +1221,12 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     if(!hits.length) closeComposerMenu();
     else openComposerMenu(hits);
   });
+
   composerInput.addEventListener('focus', () => {
     const hits = computeComposerHits();
     if(hits.length) openComposerMenu(hits);
   });
+
   document.addEventListener('click', (ev) => {
     if(!composerMenu.contains(ev.target) && ev.target !== composerInput){
       closeComposerMenu();
@@ -1217,9 +1242,8 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
   const stClear = document.getElementById('stClear');
   const stActive = document.getElementById('stActive');
 
-  // injected by Python: [{k:"cnto", n:123}, ...]
   const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
-  const stRules = []; // {mode:"include"|"exclude", cmp:"ge"|"eq", k:"cnto", n:3}
+  const stRules = [];
 
   SEARCH_TOOL_INSTRS.forEach(o => {
     const opt = document.createElement('option');
@@ -1264,14 +1288,52 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     applyFilters();
   });
 
-  // ============ Cache parsers per card (piece-wise, collection-intelligent)
+  // ============ Contextual manuscript detail filter
+  function updateMsDetailVisibility() {
+    if (sourceFilter.value === 'Manuscript') {
+      msDetailBlock.style.display = '';
+    } else {
+      msDetailFilter.value = '';
+      msDetailBlock.style.display = 'none';
+    }
+  }
+
+  // ============ Clear all filters
+  function clearAllFiltersFn() {
+    searchInput.value = '';
+
+    composerInput.value = '';
+    composerSelected = '';
+    closeComposerMenu();
+
+    instrInput.value = '';
+    yearFrom.value = '';
+    yearTo.value = '';
+
+    musicFilter.value = '';
+    sourceFilter.value = '';
+    msDetailFilter.value = '';
+    updateMsDetailVisibility();
+
+    stRules.length = 0;
+    renderStRules();
+
+    cards.forEach(card => {
+      applyCollectionView(card, null);
+    });
+
+    applyFilters();
+  }
+
+  clearAllFilters.addEventListener('click', clearAllFiltersFn);
+
+  // ============ Cache parsers per card
   function parseSearchToolPieces(card){
     if(card.__stPieces) return card.__stPieces;
 
     const raw = card.dataset.stoolPieces || '';
     const pieces = [];
     if(raw){
-      // format: pid@@sc1||sc2##pid@@sc1||...
       raw.split('##').forEach(chunk => {
         if(!chunk) return;
         const parts = chunk.split('@@');
@@ -1306,7 +1368,6 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     const raw = card.dataset.yrPieces || '';
     const pieces = [];
     if(raw){
-      // format: pid@@min:max||min:max##pid@@...
       raw.split('##').forEach(chunk => {
         if(!chunk) return;
         const parts = chunk.split('@@');
@@ -1331,20 +1392,18 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     return pieces;
   }
 
-  // ============ Matching logic (Search Tool)
   function ruleOk(val, rule){
     const n = rule.n;
     const cmp = rule.cmp;
     if(rule.mode === 'include'){
       if(cmp === 'eq') return (val === n);
       return (val >= n);
-    } else { // exclude
+    } else {
       if(cmp === 'eq') return (val !== n);
       return (val < n);
     }
   }
 
-  // Returns {ok:boolean, matchPids:Set}
   function matchesSearchTool(card){
     if(!stRules.length) return {ok:true, matchPids:new Set()};
     const pieces = parseSearchToolPieces(card);
@@ -1364,22 +1423,18 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
         return true;
       });
 
-      if(okPiece){
-        matchPids.add(p.pid);
-      }
+      if(okPiece) matchPids.add(p.pid);
     }
 
     return {ok: matchPids.size > 0, matchPids};
   }
 
-  // ============ Matching logic (Year filter)
   function overlapsYearRange(rmin, rmax, fromY, toY){
     if(fromY !== null && rmax < fromY) return false;
     if(toY   !== null && rmin > toY)   return false;
     return true;
   }
 
-  // Returns {ok:boolean, matchPids:Set}
   function matchesYearFilter(card){
     const fromY = parseIntSafe(yearFrom.value);
     const toY   = parseIntSafe(yearTo.value);
@@ -1401,19 +1456,15 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     return {ok: matchPids.size > 0, matchPids};
   }
 
-  // ============ Composer match set (collection-aware)
   function composerMatchSet(card){
     if(!composerSelected) return {ok:true, matchPids:null};
 
-    // fast pass for single pieces:
     const clist = (card.dataset.composers || '').split('||').filter(Boolean);
     const hasAny = clist.includes(composerSelected);
     if(!hasAny) return {ok:false, matchPids:new Set()};
 
-    // if collection, prefer subpiece composer matches; fallback to header composer -> keep all lines
     const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
     if(!lines.length){
-      // no lines => single piece card; ok already true
       return {ok:true, matchPids:null};
     }
 
@@ -1430,17 +1481,14 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
       return {ok:true, matchPids:hits};
     }
 
-    // fallback: if the header composer matches, keep ALL subpieces (even if piece composer is blank)
     const headerC = (card.dataset.composerRaw || '').trim();
     if(headerC === composerSelected){
       return {ok:true, matchPids:all};
     }
 
-    // should not happen if clist includes composerSelected, but keep safe
     return {ok:false, matchPids:new Set()};
   }
 
-  // ============ Highlight + smart collection view
   function applyCollectionView(card, showSet){
     const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
     if(!lines.length) return;
@@ -1448,7 +1496,6 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     const badge = card.querySelector('.subpieces-matchcount');
 
     if(!showSet){
-      // no piece-level filters => reset
       lines.forEach(ln => {
         ln.classList.remove('is-match');
         ln.style.display = '';
@@ -1471,19 +1518,59 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     }
   }
 
-  // ============ Populate Music/Source filters
+  // ============ Populate filters
   const musicSet = new Set();
-  const sourceSet = new Set();
+  const sourceCategorySet = new Set();
+  const msDetailSet = new Set();
+
   cards.forEach(card => {
     (card.dataset.musicTypes || '').split('||').filter(Boolean).forEach(v => musicSet.add(v));
-    (card.dataset.sourceTypes || '').split('||').filter(Boolean).forEach(v => sourceSet.add(v));
+    (card.dataset.sourceCategories || '').split('||').filter(Boolean).forEach(v => sourceCategorySet.add(v));
+    (card.dataset.msDetails || '').split('||').filter(Boolean).forEach(v => msDetailSet.add(v));
   });
-  Array.from(musicSet).sort().forEach(v => {
+
+  const musicOrder = {
+    'Instrumental': 1,
+    'Vocal / Mixed': 2,
+  };
+
+  Array.from(musicSet).sort((a,b) => {
+    const aa = musicOrder[a] || 99;
+    const bb = musicOrder[b] || 99;
+    return aa === bb ? a.localeCompare(b) : aa - bb;
+  }).forEach(v => {
     const o=document.createElement('option'); o.value=v; o.textContent=v; musicFilter.appendChild(o);
   });
-  Array.from(sourceSet).sort().forEach(v => {
+
+  const sourceCategoryOrder = {
+    'Manuscript': 1,
+    'Print': 2,
+    'Text': 3,
+  };
+
+  Array.from(sourceCategorySet).sort((a,b) => {
+    const aa = sourceCategoryOrder[a] || 99;
+    const bb = sourceCategoryOrder[b] || 99;
+    return aa === bb ? a.localeCompare(b) : aa - bb;
+  }).forEach(v => {
     const o=document.createElement('option'); o.value=v; o.textContent=v; sourceFilter.appendChild(o);
   });
+
+  const msDetailOrder = {
+    'Ms.': 1,
+    'Ms. Autograph': 2,
+    'Ms. Copy': 3,
+  };
+
+  Array.from(msDetailSet).sort((a,b) => {
+    const aa = msDetailOrder[a] || 99;
+    const bb = msDetailOrder[b] || 99;
+    return aa === bb ? a.localeCompare(b) : aa - bb;
+  }).forEach(v => {
+    const o=document.createElement('option'); o.value=v; o.textContent=v; msDetailFilter.appendChild(o);
+  });
+
+  updateMsDetailVisibility();
 
   // ============ Main filter
   function applyFilters() {
@@ -1491,49 +1578,45 @@ function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
     const qi = normalize(instrInput.value);
     const mt = musicFilter.value;
     const st = sourceFilter.value;
+    const msd = msDetailFilter.value;
 
- let visible = 0;
-let matchingPieces = 0;
+    let visible = 0;
+    let matchingPieces = 0;
 
-const stActiveOn = stRules.length > 0;
-const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
-const compActiveOn = !!composerSelected;
-
-// Piece-level filters are filters that can identify matching pieces inside collections.
-const pieceLevelActive = stActiveOn || yrActiveOn || compActiveOn;
+    const stActiveOn = stRules.length > 0;
+    const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
+    const compActiveOn = !!composerSelected;
+    const pieceLevelActive = stActiveOn || yrActiveOn || compActiveOn;
 
     cards.forEach(card => {
       const text  = normalize(card.dataset.search);
       const instr = normalize(card.dataset.instr);
       const mts = (card.dataset.musicTypes || '').split('||').filter(Boolean);
-      const sts = (card.dataset.sourceTypes || '').split('||').filter(Boolean);
+      const sourceCats = (card.dataset.sourceCategories || '').split('||').filter(Boolean);
+      const msDetails = (card.dataset.msDetails || '').split('||').filter(Boolean);
 
       let ok = true;
       if (q  && !text.includes(q)) ok = false;
       if (qi && !instr.includes(qi)) ok = false;
       if (mt && !mts.includes(mt)) ok = false;
-      if (st && !sts.includes(st)) ok = false;
+      if (st && !sourceCats.includes(st)) ok = false;
+      if (msd && !msDetails.includes(msd)) ok = false;
 
-      // Composer exact filter (raw) on click
       const compMatch = composerMatchSet(card);
       if(ok && !compMatch.ok) ok = false;
 
-      // Search Tool (collection intelligent)
       let stMatch = {ok:true, matchPids:new Set()};
       if(ok){
         stMatch = matchesSearchTool(card);
         if(!stMatch.ok) ok = false;
       }
 
-      // Year filter (collection intelligent)
       let yrMatch = {ok:true, matchPids:new Set()};
       if(ok){
         yrMatch = matchesYearFilter(card);
         if(!yrMatch.ok) ok = false;
       }
 
-      // Build showSet (intersection of active piece-level filters)
-      // If none are active => null (reset view)
       let showSet = null;
       const hasLines = card.querySelector('.subpiece-line[data-pid]') !== null;
 
@@ -1544,7 +1627,6 @@ const pieceLevelActive = stActiveOn || yrActiveOn || compActiveOn;
         if(yrActiveOn) sets.push(yrMatch.matchPids);
 
         if(sets.length){
-          // intersection
           showSet = new Set(sets[0]);
           for(let i=1;i<sets.length;i++){
             const next = sets[i];
@@ -1554,30 +1636,24 @@ const pieceLevelActive = stActiveOn || yrActiveOn || compActiveOn;
         }
       }
 
- card.style.display = ok ? '' : 'none';
+      card.style.display = ok ? '' : 'none';
 
-if (ok) {
-  visible++;
-}
+      if (ok) visible++;
 
-// Smart collection view: filter subpieces + highlight matches
-if (ok) {
-  applyCollectionView(card, showSet);
+      if (ok) {
+        applyCollectionView(card, showSet);
 
-  if (pieceLevelActive) {
-    const subpieceCount = countVisibleSubpieces(card);
-
-    // If it is a collection, count visible matching subpieces.
-    // If it is a single-piece card, count it as 1 matching piece.
-    matchingPieces += subpieceCount ? subpieceCount : 1;
-  }
-} else {
-  applyCollectionView(card, null);
-}
+        if (pieceLevelActive) {
+          const subpieceCount = countVisibleSubpieces(card);
+          matchingPieces += subpieceCount ? subpieceCount : 1;
+        }
+      } else {
+        applyCollectionView(card, null);
+      }
     });
 
-noResults.style.display = visible ? 'none' : '';
-updateResultCount(visible, matchingPieces, pieceLevelActive);
+    noResults.style.display = visible ? 'none' : '';
+    updateResultCount(visible, matchingPieces, pieceLevelActive);
   }
 
   searchInput.addEventListener('input', applyFilters);
@@ -1585,7 +1661,13 @@ updateResultCount(visible, matchingPieces, pieceLevelActive);
   yearFrom.addEventListener('input', applyFilters);
   yearTo.addEventListener('input', applyFilters);
   musicFilter.addEventListener('change', applyFilters);
-  sourceFilter.addEventListener('change', applyFilters);
+  sourceFilter.addEventListener('change', () => {
+    updateMsDetailVisibility();
+    applyFilters();
+  });
+  msDetailFilter.addEventListener('change', applyFilters);
+
+  applyFilters();
 </script>
 </body>
 </html>
@@ -1631,18 +1713,13 @@ detail_template = """<!doctype html>
 # MAIN
 # =========================
 def main():
-    # Clean output dir
     if OUT_DIR.exists():
         shutil.rmtree(OUT_DIR)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Force fully static on GitHub Pages
     (OUT_DIR / ".nojekyll").write_text("", encoding="utf-8")
-
-    # Write CSS
     (OUT_DIR / "style.css").write_text(style_css, encoding="utf-8")
 
-    # Copy assets
     assets_dir = OUT_DIR / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
     if (ASSETS_SRC / HEM_LOGO).exists():
@@ -1650,7 +1727,6 @@ def main():
     if (ASSETS_SRC / RISM_LOGO).exists():
         shutil.copy(ASSETS_SRC / RISM_LOGO, assets_dir / RISM_LOGO)
 
-    # Read Google Sheet CSV
     df = pd.read_csv(SHEET_CSV_URL, dtype={COL_RISM_NO: "string"})
     df.columns = [str(c).replace("\r\n", "\n").strip() for c in df.columns]
 
@@ -1658,7 +1734,6 @@ def main():
     df["__group"] = df[COL_ZINK].apply(group_id)
     df_sorted = df.sort_values("__sort_key").reset_index(drop=True)
 
-    # Groups
     groups = {}
     for _, row in df_sorted.iterrows():
         zid = clean_str(get_col(row, COL_ZINK))
@@ -1670,7 +1745,6 @@ def main():
         ids.sort(key=parse_zinknet)
     group_sizes = {gid: len(ids) for gid, ids in groups.items()}
 
-    # Records
     records = {}
     for _, row in df_sorted.iterrows():
         zid = clean_str(get_col(row, COL_ZINK))
@@ -1701,7 +1775,6 @@ def main():
             "organology_raw": clean_str(get_col(row, COL_ORG)),
             "search_tool_raw": clean_str(get_col(row, COL_SEARCH_TOOL)),
 
-            # RISM optional fields
             "rism_holdings_raw": clean_str(get_col(row, COL_RISM_HOLDINGS)) if (COL_RISM_HOLDINGS in df.columns) else "",
             "rism_date_raw": clean_str(get_col(row, COL_RISM_DATE)) if (COL_RISM_DATE in df.columns) else "",
             "rism_earliest_year_raw": clean_numberish(get_col(row, COL_RISM_EARLIEST)) if (COL_RISM_EARLIEST in df.columns) else "",
@@ -1728,20 +1801,16 @@ def main():
         rec["note"] = escape_textnode(rec["note_raw"])
         rec["organology"] = escape_textnode(rec["organology_raw"])
 
-        # Search Tool scenarios
         rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
 
-        # Year bounds (filter only)
         rec["year_min"] = parse_int_safe(rec["rism_earliest_year_raw"])
         rec["year_max"] = parse_int_safe(rec["rism_latest_year_raw"])
 
         records[zid] = rec
 
-    # Concordances IDs
     for rec in records.values():
         rec["concordances_ids"] = [cid for cid in parse_conc_ids(rec["concordances_raw"]) if cid in records]
 
-    # Virtual collections
     virtual_headers = set()
     for gid, ids in groups.items():
         has_real_coll = any(records[z]["indiv_coll"] == "Coll." for z in ids if z in records)
@@ -1770,7 +1839,6 @@ def main():
                 "year_min": None, "year_max": None,
             }
 
-    # Global Search Tool instrument index (frequency = number of records where it can appear)
     all_instr = set()
     instr_freq = {}
     for rec in records.values():
@@ -1788,7 +1856,6 @@ def main():
         ensure_ascii=False
     )
 
-    # Composer dropdown index (raw display + tokens)
     composer_set = sorted(
         {records[z]["composer_raw"] for z in records if records[z].get("composer_raw")},
         key=lambda s: s.lower()
@@ -1813,7 +1880,6 @@ def main():
         hrec = records[header_id]
         gcount_total = len(ids)
 
-        # tags (dedupe only inside this tag-row)
         used_links_tags = set()
         tags_html = []
 
@@ -1836,7 +1902,6 @@ def main():
             if chip:
                 tags_html.append(chip)
 
-        # RISM date chip next to composer line (index only; neutral color)
         rism_dates = sorted({
             clean_str(records[z].get("rism_date_raw", "")).strip()
             for z in ids
@@ -1853,7 +1918,6 @@ def main():
 
         display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
 
-        # Collections: no catalog instrumentation in main view
         instr_block = build_instr_block_for_record(hrec, include_catalogs=not (coll_id or is_virtual_collection))
 
         meta_rows = []
@@ -1875,7 +1939,6 @@ def main():
 
         meta_html = ('<dl class="meta">' + "\n".join(meta_rows) + "</dl>") if meta_rows else ""
 
-        # contents
         sub_block = ""
         if coll_id or is_virtual_collection:
             sub_lines = []
@@ -1916,7 +1979,6 @@ def main():
         title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
         title_part = f" — {title_html}" if title_html else ""
 
-        # dataset attributes for filtering (full text)
         search_blob_parts = []
         for z in ids:
             rr = records[z]
@@ -1930,18 +1992,13 @@ def main():
                 rr.get("rism_holdings_raw",""),
             ])
         search_blob = " ".join([p for p in search_blob_parts if p]).replace("\n", " ")
-            # Music type filter values
-        # Important UX rule:
-        # "Instrumental / Vocal / Mixed" is not a real filter category.
-        # It marks mixed collections, but users should filter them through
-        # their actual contained types: Instrumental and/or Vocal / Mixed.
-        music_types_for_filter = set()
 
+        # Music type filter values
+        music_types_for_filter = set()
         for z in ids:
             mt = records[z]["music_type_raw"]
             if not mt:
                 continue
-
             if mt == "Instrumental / Vocal / Mixed":
                 music_types_for_filter.add("Instrumental")
                 music_types_for_filter.add("Vocal / Mixed")
@@ -1958,21 +2015,50 @@ def main():
             key=lambda x: (music_type_order.get(x, 99), x.lower())
         )
 
-        source_types_set = sorted({records[z]["source_type_raw"] for z in ids if records[z]["source_type_raw"]})
+        # Source category + manuscript detail filters
+        source_categories_for_group = set()
+        ms_details_for_group = set()
+
+        for z in ids:
+            st_raw = records[z]["source_type_raw"]
+            source_categories_for_group.update(source_categories_for_filter(st_raw))
+            ms_details_for_group.update(manuscript_details_for_filter(st_raw))
+
+        source_category_order = {
+            "Manuscript": 1,
+            "Print": 2,
+            "Text": 3,
+        }
+
+        ms_detail_order = {
+            "Ms.": 1,
+            "Ms. Autograph": 2,
+            "Ms. Copy": 3,
+        }
+
+        source_categories_set = sorted(
+            source_categories_for_group,
+            key=lambda x: (source_category_order.get(x, 99), x.lower())
+        )
+
+        ms_details_set = sorted(
+            ms_details_for_group,
+            key=lambda x: (ms_detail_order.get(x, 99), x.lower())
+        )
+
         instr_blob = " ".join(
             ((records[z]["instr_rism_main_raw"] + " " + records[z]["instr_rism_alt_raw"] + " " + records[z]["instr_catalogs_raw"]).strip())
             for z in ids
         ).replace("\n", " ")
 
-        # all composers in this group (for composer filtering)
         composers_set = sorted(
             {records[z].get("composer_raw", "") for z in ids if records[z].get("composer_raw", "")},
             key=lambda x: x.lower()
         )
         composers_blob = "||".join(composers_set)
 
-        # per-piece Search Tool scenarios (only pieces that appear as lines)
         line_ids = [z for z in ids if not (coll_id and z == coll_id)]
+
         piece_chunks = []
         for z in line_ids if (coll_id or is_virtual_collection) else [header_id]:
             rr = records[z]
@@ -1987,21 +2073,9 @@ def main():
             piece_chunks.append(f"{z}@@{'||'.join(sc_keys)}")
         stool_pieces_blob = "##".join(piece_chunks)
 
-        # per-piece Year ranges
-        # For collections, include BOTH:
-        # - the collection/header date (x/0), if present
-        # - the dates of the individual pieces (x/1, x/2, ...)
-        #
-        # This fixes cases like A-1069/0 where the RISM date belongs to
-        # the collection notice itself and not to the individual pieces.
         yr_chunks = []
-
         if coll_id or is_virtual_collection:
             year_ids = list(line_ids)
-
-            # Add collection/header date as a synthetic match.
-            # "__HEADER__" is not displayed as a subpiece, but it lets
-            # the collection card match the chronology filter.
             hymin = hrec.get("year_min", None)
             hymax = hrec.get("year_max", None)
             if hymin is not None and hymax is not None:
@@ -2028,7 +2102,8 @@ def main():
       data-composer-raw="{escape_attr(hrec.get('composer_raw',''))}"
       data-composers="{escape_attr(composers_blob)}"
       data-music-types="{escape_attr('||'.join(music_types_set))}"
-      data-source-types="{escape_attr('||'.join(source_types_set))}"
+      data-source-categories="{escape_attr('||'.join(source_categories_set))}"
+      data-ms-details="{escape_attr('||'.join(ms_details_set))}"
       data-instr="{escape_attr(instr_blob)}"
       data-stool-pieces="{escape_attr(stool_pieces_blob)}"
       data-yr-pieces="{escape_attr(yr_pieces_blob)}">
@@ -2089,8 +2164,6 @@ def main():
             n = len(rec["concordances_ids"])
             tags.append(f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>')
 
-        # RISM date is shown inside the RISM drawer (not as a tag on detail pages)
-
         self_link = norm_url(rec.get("rism_link_raw",""))
         coll_link = norm_url(parent_rec.get("rism_link_raw","")) if parent_rec else ""
 
@@ -2126,7 +2199,6 @@ def main():
 
         meta_html = "".join(meta_bits)
 
-        # RISM drawer (simplified: no parasite text, no redundant "open/close" pill; keep Date + Holdings labels)
         rism_drawer = ""
         rism_date = clean_str(rec.get("rism_date_raw",""))
         rism_holdings = clean_str(rec.get("rism_holdings_raw",""))
