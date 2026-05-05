@@ -160,22 +160,49 @@ def format_uniform_instr(raw_text, alternative=False):
 
 def parse_zinknet(no):
     """
-    Sort by numeric part first, then subnumber, then prefix as tie-breaker.
+    Standard catalogue order:
+      1. batch prefix: A, then B, then C, ...
+      2. main number
+      3. subnumber after slash
+
+    Supports:
+      - A-1
+      - A-682/0
+      - B-1
+      - C-12/3
+      - 682/0
+
+    Entries without prefix are placed after prefixed batches.
     """
     s = clean_str(no)
     if not s:
-        return (10**9, 10**9, "")
+        return (10**9, 10**9, 10**9, "")
 
-    prefix_match = re.match(r"\s*([A-Za-z]+)\s*[-–—]\s*", s)
-    prefix = prefix_match.group(1).upper() if prefix_match else ""
+    # Prefix before dash: A-682, B-12, etc.
+    pm = re.match(r"^\s*([A-Za-z]+)\s*[-–—]\s*", s)
+    prefix = pm.group(1).upper() if pm else ""
 
+    # Convert prefix to batch rank: A=1, B=2, C=3...
+    if prefix:
+        batch_rank = 0
+        for ch in prefix:
+            if "A" <= ch <= "Z":
+                batch_rank = batch_rank * 26 + (ord(ch) - ord("A") + 1)
+            else:
+                batch_rank = 10**6
+                break
+    else:
+        batch_rank = 10**6  # unprefixed entries after A/B/C batches
+
+    # Numeric part and optional /subnumber
     m = re.search(r"(\d+)(?:\s*/\s*(\d+))?", s)
     if not m:
-        return (10**9, 10**9, prefix)
+        return (batch_rank, 10**9, 10**9, s)
 
     main = int(m.group(1))
     sub = int(m.group(2)) if m.group(2) is not None else 0
-    return (main, sub, prefix)
+
+    return (batch_rank, main, sub, s)
 
 def group_id(no):
     s = clean_str(no)
