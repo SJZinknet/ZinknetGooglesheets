@@ -1298,6 +1298,69 @@ index_template = """<!doctype html>
     }
   }
 
+  // ============ Organology link filter
+  // Supported URL fragments:
+  //   index.html#org=IDENTIFIER
+  //   index.html#organology=IDENTIFIER
+  //
+  // This works because the Organology column is already included
+  // in data-search / Global search.
+  const orgFilterBadge = document.createElement('div');
+  orgFilterBadge.id = 'orgFilterBadge';
+  orgFilterBadge.style.display = 'none';
+  orgFilterBadge.style.margin = '0 0 10px';
+  orgFilterBadge.style.fontSize = '0.86rem';
+  orgFilterBadge.style.color = 'var(--violet-text)';
+  orgFilterBadge.style.fontWeight = '600';
+  orgFilterBadge.style.cursor = 'pointer';
+
+  entriesContainer.insertAdjacentElement('beforebegin', orgFilterBadge);
+
+  function readOrgFilterFromHash() {
+    const raw = (window.location.hash || '').replace(/^#/, '');
+    if (!raw) return '';
+
+    const params = new URLSearchParams(raw);
+    return params.get('org') || params.get('organology') || '';
+  }
+
+  function clearOrgHash() {
+    if (window.location.hash) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
+
+  function applyOrgFilterFromHash() {
+    const orgId = readOrgFilterFromHash();
+
+    if (!orgId) {
+      orgFilterBadge.style.display = 'none';
+      orgFilterBadge.textContent = '';
+      return;
+    }
+
+    searchInput.value = orgId;
+
+    orgFilterBadge.style.display = '';
+    orgFilterBadge.innerHTML = `Organology link filter: <strong>${orgId}</strong> ×`;
+    orgFilterBadge.title = 'Click to clear this Organology link filter';
+  }
+
+  orgFilterBadge.addEventListener('click', () => {
+    clearOrgHash();
+    searchInput.value = '';
+    orgFilterBadge.style.display = 'none';
+    orgFilterBadge.textContent = '';
+    applyFilters();
+  });
+
+  window.addEventListener('hashchange', () => {
+    applyOrgFilterFromHash();
+    applyFilters();
+  });
+
+  applyOrgFilterFromHash();
+
   // ============ Clear all filters
   function clearAllFiltersFn() {
     searchInput.value = '';
@@ -1314,6 +1377,10 @@ index_template = """<!doctype html>
     sourceFilter.value = '';
     msDetailFilter.value = '';
     updateMsDetailVisibility();
+
+    clearOrgHash();
+    orgFilterBadge.style.display = 'none';
+    orgFilterBadge.textContent = '';
 
     stRules.length = 0;
     renderStRules();
