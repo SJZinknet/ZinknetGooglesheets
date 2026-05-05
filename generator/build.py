@@ -1100,8 +1100,39 @@ function clearAllFiltersFn() {
 clearAllFilters.addEventListener('click', clearAllFiltersFn);
 
 const entriesContainer = document.getElementById('entries');
-  const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
-  const noResults = document.getElementById('noResults');
+const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
+const noResults = document.getElementById('noResults');
+
+/* Result count — injected by JS */
+const resultCount = document.createElement('div');
+resultCount.id = 'resultCount';
+resultCount.style.margin = '0 0 10px';
+resultCount.style.fontSize = '0.86rem';
+resultCount.style.color = 'var(--muted)';
+resultCount.style.fontWeight = '600';
+
+entriesContainer.insertAdjacentElement('beforebegin', resultCount);
+
+function countVisibleSubpieces(card) {
+  const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
+  if (!lines.length) return 0;
+  return lines.filter(ln => ln.style.display !== 'none').length;
+}
+
+function countAllSubpieces(card) {
+  return card.querySelectorAll('.subpiece-line[data-pid]').length;
+}
+
+function updateResultCount(visibleCards, matchingPieces, pieceLevelActive) {
+  const entryWord = visibleCards === 1 ? 'entry' : 'entries';
+
+  if (pieceLevelActive) {
+    const pieceWord = matchingPieces === 1 ? 'piece' : 'pieces';
+    resultCount.textContent = `${visibleCards} catalogue ${entryWord} shown · ${matchingPieces} matching ${pieceWord}`;
+  } else {
+    resultCount.textContent = `${visibleCards} catalogue ${entryWord} shown`;
+  }
+}
 
   function normalize(s){ return (s || '').toLowerCase(); }
   function normSpaces(s){ return (s || '').replace(/\\s+/g,' ').trim(); }
@@ -1461,11 +1492,15 @@ const entriesContainer = document.getElementById('entries');
     const mt = musicFilter.value;
     const st = sourceFilter.value;
 
-    let visible = 0;
+ let visible = 0;
+let matchingPieces = 0;
 
-    const stActiveOn = stRules.length > 0;
-    const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
-    const compActiveOn = !!composerSelected;
+const stActiveOn = stRules.length > 0;
+const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
+const compActiveOn = !!composerSelected;
+
+// Piece-level filters are filters that can identify matching pieces inside collections.
+const pieceLevelActive = stActiveOn || yrActiveOn || compActiveOn;
 
     cards.forEach(card => {
       const text  = normalize(card.dataset.search);
@@ -1519,15 +1554,30 @@ const entriesContainer = document.getElementById('entries');
         }
       }
 
-      card.style.display = ok ? '' : 'none';
-      if (ok) visible++;
+ card.style.display = ok ? '' : 'none';
 
-      // Smart collection view: filter subpieces + highlight matches
-      if(ok) applyCollectionView(card, showSet);
-      else applyCollectionView(card, null);
+if (ok) {
+  visible++;
+}
+
+// Smart collection view: filter subpieces + highlight matches
+if (ok) {
+  applyCollectionView(card, showSet);
+
+  if (pieceLevelActive) {
+    const subpieceCount = countVisibleSubpieces(card);
+
+    // If it is a collection, count visible matching subpieces.
+    // If it is a single-piece card, count it as 1 matching piece.
+    matchingPieces += subpieceCount ? subpieceCount : 1;
+  }
+} else {
+  applyCollectionView(card, null);
+}
     });
 
-    noResults.style.display = visible ? 'none' : '';
+noResults.style.display = visible ? 'none' : '';
+updateResultCount(visible, matchingPieces, pieceLevelActive);
   }
 
   searchInput.addEventListener('input', applyFilters);
