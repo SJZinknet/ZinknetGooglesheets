@@ -148,6 +148,9 @@ h1{
   font-size:0.85rem; color:var(--text);
   outline:none; cursor:pointer;
 }
+.filters button {
+  font-family: inherit;
+}
 .filters-row { display:flex; flex-direction:column; gap:10px; }
 .filter-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .filter-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
@@ -175,7 +178,6 @@ summary::-webkit-details-marker { display:none; }
 .entry-main { display:flex; flex-direction:column; gap:3px; }
 .entry-id { font-weight:650; font-size:0.96rem; color:#020617; }
 
-/* Composer line can contain date chip */
 .entry-composer {
   font-size:0.85rem;
   color:var(--muted);
@@ -197,7 +199,6 @@ summary::-webkit-details-marker { display:none; }
 .tag-count { background: var(--green-collection-bg); border-color: var(--green-collection); color: var(--green-collection); font-weight:650; }
 .tag-conc { border:1px solid var(--border-subtle); background:#ffffff; }
 
-/* RISM mini-chip */
 .tag-rism{
   border-color: var(--violet-border);
   background: var(--violet-bg);
@@ -207,7 +208,6 @@ summary::-webkit-details-marker { display:none; }
   font-weight:650;
 }
 
-/* Elegant duo wrapper */
 .rism-duo{
   display:inline-flex;
   align-items:center;
@@ -222,7 +222,6 @@ summary::-webkit-details-marker { display:none; }
   border-radius:1px;
 }
 
-/* See RISM */
 .see-rism-tag {
   display:inline-flex; align-items:center; margin-left:6px;
   padding:2px 6px; border-radius:999px;
@@ -323,7 +322,6 @@ dd.meta-value { margin:0; }
 .piece-notes { font-size:0.88rem; margin-top:8px; }
 .piece-notes .label { font-weight:600; color:var(--muted); display:block; margin-bottom:3px; }
 
-/* Concordances cards */
 .conc-block { margin-top:14px; }
 .conc-heading { font-size:0.78rem; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); margin-bottom:6px; }
 .conc-cards { display:flex; flex-direction:column; gap:6px; }
@@ -355,7 +353,6 @@ dd.meta-value { margin:0; }
 .sub-entry-body .instr-pill, .sub-entry-body .instr-pill.catalog-full { background:#ffffff; border-style:dashed; }
 .sub-entry-conc { margin-top:4px; }
 
-/* Composer dropdown menu */
 .composer-menu{
   display:none;
   position:relative;
@@ -385,7 +382,6 @@ dd.meta-value { margin:0; }
   background: rgba(35,75,184,0.06);
 }
 
-/* RISM drawer (detail pages) — simplified */
 details.rism {
   margin-top:14px;
   border:1.5px solid rgba(139,92,246,0.35);
