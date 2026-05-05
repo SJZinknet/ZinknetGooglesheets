@@ -1930,7 +1930,34 @@ def main():
                 rr.get("rism_holdings_raw",""),
             ])
         search_blob = " ".join([p for p in search_blob_parts if p]).replace("\n", " ")
-        music_types_set = sorted({records[z]["music_type_raw"] for z in ids if records[z]["music_type_raw"]})
+            # Music type filter values
+        # Important UX rule:
+        # "Instrumental / Vocal / Mixed" is not a real filter category.
+        # It marks mixed collections, but users should filter them through
+        # their actual contained types: Instrumental and/or Vocal / Mixed.
+        music_types_for_filter = set()
+
+        for z in ids:
+            mt = records[z]["music_type_raw"]
+            if not mt:
+                continue
+
+            if mt == "Instrumental / Vocal / Mixed":
+                music_types_for_filter.add("Instrumental")
+                music_types_for_filter.add("Vocal / Mixed")
+            else:
+                music_types_for_filter.add(mt)
+
+        music_type_order = {
+            "Instrumental": 1,
+            "Vocal / Mixed": 2,
+        }
+
+        music_types_set = sorted(
+            music_types_for_filter,
+            key=lambda x: (music_type_order.get(x, 99), x.lower())
+        )
+
         source_types_set = sorted({records[z]["source_type_raw"] for z in ids if records[z]["source_type_raw"]})
         instr_blob = " ".join(
             ((records[z]["instr_rism_main_raw"] + " " + records[z]["instr_rism_alt_raw"] + " " + records[z]["instr_catalogs_raw"]).strip())
