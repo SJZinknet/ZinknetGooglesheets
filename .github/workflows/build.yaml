@@ -3,6 +3,14 @@ name: Build ZinkNET from Google Sheet (manual)
 on:
   workflow_dispatch:
 
+  push:
+    branches:
+      - main
+    paths:
+      - "generator/**"
+      - "assets_src/**"
+      - ".github/workflows/build.yaml"
+
 permissions:
   contents: write
 
