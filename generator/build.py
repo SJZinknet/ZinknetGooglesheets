@@ -501,22 +501,22 @@ def build_header_html():
     </div>
 
     <div class="right">
-      <div class="hem-stack">
+      <div class="hem-slot">
         {hem_block}
       </div>
 
-      <div class="partner-separator"></div>
+      <div class="partner-text">
+        In collaboration with
+      </div>
 
-      <div class="partner-line">
-        <span class="partner-text">In collaboration with</span>
+      <div class="rism-slot">
         {rism_block}
       </div>
-    </div>
     </div>
   </div>
 </header>
 """
-
+    
 # =========================
 # CSS
 # =========================
@@ -553,18 +553,22 @@ a:hover { text-decoration:underline; }
 
 /* Header */
 header.app-header {
-  padding: 9px 22px 7px;
+  padding: 9px 22px 8px;
   border-bottom: 1px solid var(--border-subtle);
   background: linear-gradient(to right,rgba(255,255,255,0.98),rgba(245,247,255,0.96));
-  position: sticky; top:0; z-index:20;
+  position: sticky;
+  top:0;
+  z-index:20;
   backdrop-filter: blur(10px);
 }
+
 .header-grid{
   display:grid;
   grid-template-columns: minmax(0,1fr) auto;
-  gap: 12px;
-  align-items:start;
+  gap: 18px;
+  align-items:center;
 }
+
 h1{
   margin:0;
   font-size: clamp(1.7rem, 3vw, 2.1rem);
@@ -572,11 +576,13 @@ h1{
   font-weight:800;
   line-height:1.03;
 }
+
 .tagline{
   margin-top:2px;
   color:var(--muted);
   font-size:0.92rem;
 }
+
 .meta-line{
   margin-top:5px;
   color:var(--muted);
@@ -586,72 +592,67 @@ h1{
   text-overflow:ellipsis;
   max-width: 100%;
 }
+
+/*
+  Header logos:
+  The HEM logo and the RISM logo are placed in the same right-hand column.
+  The text “In collaboration with” is in a separate left column, so it does
+  not affect the horizontal alignment of the two logos.
+*/
 .right{
-  display:flex;
-  flex-direction:column;
+  display:grid;
+  grid-template-columns: max-content max-content;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 4px;
   align-items:center;
-  gap: 5px;
-  padding-top: 0;
-  min-width: 260px;
+  justify-content:end;
+  justify-items:center;
+  min-width: max-content;
+  padding-top:0;
 }
 
-.hem-stack{
+.hem-slot{
+  grid-column: 2;
+  grid-row: 1;
   display:flex;
   justify-content:center;
   align-items:center;
-  width:100%;
 }
 
-.hem-logo,.rism-logo{
-  display:block;
-  width:auto;
-  filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
-}
-
-.hem-logo{
-  height: 68px;
-}
-
-.rism-logo{
-  height: 30px;
-}
-
-.partner-separator{
-  width:100%;
-  height:1px;
-  background: rgba(75,85,99,0.32);
-  margin: 2px 0 4px;
-}
-
-.partner-line{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap: 9px;
-  width:100%;
+.partner-text{
+  grid-column: 1;
+  grid-row: 2;
+  justify-self:end;
   color:var(--muted);
   font-size:0.78rem;
   line-height:1.0;
   white-space:nowrap;
 }
 
-.partner-text{
-  display:inline-block;
-}
-
 .rism-slot{
+  grid-column: 2;
+  grid-row: 2;
   display:flex;
   justify-content:center;
-  width:100%;
+  align-items:center;
 }
 
-.hem-logo,.rism-logo{
+.hem-logo,
+.rism-logo{
   display:block;
   width:auto;
   filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
 }
-.hem-logo{ height: 64px; }
-.rism-logo{ height: 30px; }
+
+.hem-logo{
+  height: 64px;
+}
+
+.rism-logo{
+  height: 30px;
+}
+
 .logo-fallback{
   padding:6px 12px;
   border-radius:999px;
@@ -662,14 +663,26 @@ h1{
   font-weight:800;
   letter-spacing:.08em;
 }
+
 .logo-fallback--small{
   padding:5px 10px;
   font-size:.80rem;
 }
+
 @media (max-width: 980px){
-  .header-grid{ grid-template-columns: 1fr; }
-  .right{ align-items:flex-start; }
-  .meta-line{ white-space:normal; }
+  .header-grid{
+    grid-template-columns: 1fr;
+    align-items:start;
+  }
+
+  .right{
+    justify-content:start;
+    grid-template-columns: max-content max-content;
+  }
+
+  .meta-line{
+    white-space:normal;
+  }
 }
 
 /* Layout */
