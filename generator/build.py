@@ -2600,11 +2600,14 @@ def main():
       data-yr-pieces="{escape_attr(yr_pieces_blob)}">
       <summary>
         <div class="entry-main" style="width:100%; min-width:0;">
-          <div class="entry-ref" style="font-size:0.72rem; color:#6b7280; font-weight:600; letter-spacing:.04em; line-height:1.1;">
-            {escape_textnode(display_id)}
+          <div class="entry-heading-line" style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; min-width:0;">
+            <span class="entry-ref" style="font-size:0.72rem; color:#6b7280; font-weight:600; letter-spacing:.04em; line-height:1.1; flex:0 0 auto;">
+              {escape_textnode(display_id)}
+            </span>
+            <span class="entry-composer-main" style="font-size:1.05rem; font-weight:750; color:#020617; line-height:1.15; min-width:0;">
+              {composer_txt}
+            </span>
           </div>
-
-          {composer_main_html}
 
           {title_line_html}
 
