@@ -501,10 +501,14 @@ def build_header_html():
     </div>
 
     <div class="right">
-      {hem_block}
-      <div class="collab-line">
-        <span>In collaboration with</span>
-        {rism_block}
+      <div class="hem-slot">
+        {hem_block}
+      </div>
+      <div class="collab-block">
+        <div class="collab-text">In collaboration with</div>
+        <div class="rism-slot">
+          {rism_block}
+        </div>
       </div>
     </div>
   </div>
@@ -583,11 +587,39 @@ h1{
 .right{
   display:flex;
   flex-direction:column;
-  align-items:center;
-  gap: 5px;
+  align-items:flex-end;
+  gap: 4px;
   padding-top: 1px;
+}
+
+.hem-slot{
+  display:flex;
+  justify-content:center;
+  width:100%;
+}
+
+.collab-block{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap: 4px;
+  width:100%;
+}
+
+.collab-text{
+  color:var(--muted);
+  font-size:0.78rem;
+  line-height:1.0;
+  white-space:nowrap;
   text-align:center;
 }
+
+.rism-slot{
+  display:flex;
+  justify-content:center;
+  width:100%;
+}
+
 .hem-logo,.rism-logo{
   display:block;
   width:auto;
@@ -595,17 +627,6 @@ h1{
 }
 .hem-logo{ height: 64px; }
 .rism-logo{ height: 30px; }
-
-.collab-line{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap: 8px;
-  color:var(--muted);
-  font-size:0.78rem;
-  line-height:1.0;
-  white-space:nowrap;
-}
 .logo-fallback{
   padding:6px 12px;
   border-radius:999px;
