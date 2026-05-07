@@ -3,7 +3,7 @@
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
 # Notes RISM UI (as agreed):
-# - Index: keep RISM Date chip next to composer line, but NEUTRAL (no violet class).
+# - Index: date appears as a small neutral pill before the title.
 # - Detail pages: remove RISM Date chip from tags; keep Date inside the RISM drawer.
 # - RISM drawer: remove demo/parasite text + remove "open/close" pill; keep labels "Date" and "Holdings".
 
@@ -1327,6 +1327,7 @@ details.rism > summary::-webkit-details-marker{display:none}
   overflow:auto;
 }
 """
+
 # =========================
 # BUILDERS
 # =========================
@@ -2324,13 +2325,13 @@ def main():
         hrec = records[header_id]
         gcount_total = len(ids)
 
-          used_links_tags = set()
+        used_links_tags = set()
 
         # =========================
         # INDEX CARD TAGS
         # =========================
         # Left tags: music/source/RISM/concordances.
-        # Right tags: collection piece count, visually separated.
+        # Right tags: collection piece count.
         tags_left_html = []
         tags_right_html = []
 
@@ -2356,7 +2357,7 @@ def main():
         # =========================
         # INDEX CARD TYPOGRAPHY
         # =========================
-        # New visual hierarchy:
+        # Visual hierarchy:
         # - ZINKNET number/cote = discreet
         # - Composer = main line
         # - Date = small neutral pill immediately before the title
@@ -2626,6 +2627,7 @@ def main():
       </div>
     </details>
     """)
+
     entries_html = "\n".join(group_html_parts)
 
     (OUT_DIR / "index.html").write_text(
