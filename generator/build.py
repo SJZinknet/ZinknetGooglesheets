@@ -2324,42 +2324,68 @@ def main():
         hrec = records[header_id]
         gcount_total = len(ids)
 
-        used_links_tags = set()
-        tags_html = []
+          used_links_tags = set()
+
+        # =========================
+        # INDEX CARD TAGS
+        # =========================
+        # Left tags: music/source/RISM/concordances.
+        # Right tags: collection piece count, visually separated.
+        tags_left_html = []
+        tags_right_html = []
 
         if hrec.get("music_type_raw"):
-            tags_html.append(f'<span class="tag tag-type">{escape_textnode(hrec["music_type_raw"])}</span>')
+            tags_left_html.append(f'<span class="tag tag-type">{escape_textnode(hrec["music_type_raw"])}</span>')
         if hrec.get("source_type_raw"):
-            tags_html.append(f'<span class="tag tag-source">{escape_textnode(hrec["source_type_raw"])}</span>')
-
-        if coll_id or is_virtual_collection:
-            nb_pieces = gcount_total - 1 if coll_id else gcount_total
-            nb_pieces = max(nb_pieces, 0)
-            tags_html.append(f'<span class="tag tag-count">{nb_pieces} piece{"s" if nb_pieces != 1 else ""}</span>')
+            tags_left_html.append(f'<span class="tag tag-source">{escape_textnode(hrec["source_type_raw"])}</span>')
 
         if hrec.get("concordances_ids"):
             n = len(hrec["concordances_ids"])
-            tags_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n != 1 else ""}</span>')
+            tags_left_html.append(f'<span class="tag tag-conc">{n} concordance{"s" if n != 1 else ""}</span>')
 
         if not is_virtual_collection:
             chip = rism_chip_self(hrec, used_links_tags)
             if chip:
-                tags_html.append(chip)
+                tags_left_html.append(chip)
 
+        if coll_id or is_virtual_collection:
+            nb_pieces = gcount_total - 1 if coll_id else gcount_total
+            nb_pieces = max(nb_pieces, 0)
+            tags_right_html.append(f'<span class="tag tag-count">{nb_pieces} piece{"s" if nb_pieces != 1 else ""}</span>')
+
+        # =========================
+        # INDEX CARD TYPOGRAPHY
+        # =========================
+        # New visual hierarchy:
+        # - ZINKNET number/cote = discreet
+        # - Composer = main line
+        # - Date = small neutral pill immediately before the title
+        # - Title = secondary line
         rism_dates = sorted({
             clean_str(records[z].get("rism_date_raw", "")).strip()
             for z in ids
             if clean_str(records[z].get("rism_date_raw", "")).strip()
         })
+
         date_chip = ""
         if len(rism_dates) == 1:
-            date_chip = f'<span class="tag" style="margin-left:6px;">{escape_textnode(rism_dates[0])}</span>'
+            date_chip = (
+                f'<span class="tag" '
+                f'style="font-size:0.68rem; padding:2px 7px; margin-right:6px; '
+                f'background:#ffffff; border-color:#d7daee; color:#6b7280; '
+                f'letter-spacing:0; text-transform:none; font-weight:500;">'
+                f'{escape_textnode(rism_dates[0])}</span>'
+            )
         elif len(rism_dates) >= 2:
-            date_chip = f'<span class="tag" style="margin-left:6px;">multiple</span>'
+            date_chip = (
+                f'<span class="tag" '
+                f'style="font-size:0.68rem; padding:2px 7px; margin-right:6px; '
+                f'background:#ffffff; border-color:#d7daee; color:#6b7280; '
+                f'letter-spacing:0; text-transform:none; font-weight:500;">'
+                f'multiple</span>'
+            )
 
         composer_txt = hrec.get("composer", "") or ""
-        composer_line = f'{composer_txt}{date_chip}'
-
         display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
 
         instr_block = build_instr_block_for_record(hrec, include_catalogs=not (coll_id or is_virtual_collection))
@@ -2421,7 +2447,27 @@ def main():
       </div>"""
 
         title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
-        title_part = f" — {title_html}" if title_html else ""
+
+        if title_html:
+            title_line_html = f"""
+          <div class="entry-title-line" style="display:flex; align-items:center; flex-wrap:wrap; gap:0; margin-top:2px; color:#374151; font-size:0.92rem; font-weight:500; line-height:1.25;">
+            {date_chip}<span>{title_html}</span>
+          </div>"""
+        elif date_chip:
+            title_line_html = f"""
+          <div class="entry-title-line" style="display:flex; align-items:center; flex-wrap:wrap; gap:0; margin-top:2px; color:#374151; font-size:0.92rem; font-weight:500; line-height:1.25;">
+            {date_chip}
+          </div>"""
+        else:
+            title_line_html = ""
+
+        if composer_txt:
+            composer_main_html = f"""
+          <div class="entry-composer-main" style="font-size:1.05rem; font-weight:750; color:#020617; line-height:1.15; margin-top:1px;">
+            {composer_txt}
+          </div>"""
+        else:
+            composer_main_html = ""
 
         search_blob_parts = []
         for z in ids:
@@ -2552,10 +2598,23 @@ def main():
       data-stool-pieces="{escape_attr(stool_pieces_blob)}"
       data-yr-pieces="{escape_attr(yr_pieces_blob)}">
       <summary>
-        <div class="entry-main">
-          <div class="entry-id">{escape_textnode(display_id)}{title_part}</div>
-          <div class="entry-composer">{composer_line}</div>
-          <div class="entry-tags">{''.join(tags_html)}</div>
+        <div class="entry-main" style="width:100%; min-width:0;">
+          <div class="entry-ref" style="font-size:0.72rem; color:#6b7280; font-weight:600; letter-spacing:.04em; line-height:1.1;">
+            {escape_textnode(display_id)}
+          </div>
+
+          {composer_main_html}
+
+          {title_line_html}
+
+          <div class="entry-tags" style="display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; margin-top:6px;">
+            <div class="entry-tags-left" style="display:flex; flex-wrap:wrap; gap:4px; align-items:center; min-width:0;">
+              {''.join(tags_left_html)}
+            </div>
+            <div class="entry-tags-right" style="display:flex; flex-wrap:wrap; gap:4px; align-items:center; justify-content:flex-end; margin-left:auto;">
+              {''.join(tags_right_html)}
+            </div>
+          </div>
         </div>
         <div class="entry-arrow">›</div>
       </summary>
@@ -2567,7 +2626,6 @@ def main():
       </div>
     </details>
     """)
-
     entries_html = "\n".join(group_html_parts)
 
     (OUT_DIR / "index.html").write_text(
