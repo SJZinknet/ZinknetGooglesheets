@@ -641,7 +641,7 @@ h1{
 }
 
 .hem-logo{
-  height: 64px;
+  height: 75px;
 }
 
 .rism-logo{
