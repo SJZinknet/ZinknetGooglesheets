@@ -501,15 +501,17 @@ def build_header_html():
     </div>
 
     <div class="right">
-      <div class="hem-slot">
+      <div class="hem-stack">
         {hem_block}
       </div>
-      <div class="collab-block">
-        <div class="collab-text">In collaboration with</div>
-        <div class="rism-slot">
-          {rism_block}
-        </div>
+
+      <div class="partner-separator"></div>
+
+      <div class="partner-line">
+        <span class="partner-text">In collaboration with</span>
+        {rism_block}
       </div>
+    </div>
     </div>
   </div>
 </header>
@@ -587,31 +589,54 @@ h1{
 .right{
   display:flex;
   flex-direction:column;
-  align-items:flex-end;
-  gap: 4px;
-  padding-top: 1px;
+  align-items:center;
+  gap: 5px;
+  padding-top: 0;
+  min-width: 260px;
 }
 
-.hem-slot{
+.hem-stack{
   display:flex;
   justify-content:center;
-  width:100%;
-}
-
-.collab-block{
-  display:flex;
-  flex-direction:column;
   align-items:center;
-  gap: 4px;
   width:100%;
 }
 
-.collab-text{
+.hem-logo,.rism-logo{
+  display:block;
+  width:auto;
+  filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
+}
+
+.hem-logo{
+  height: 68px;
+}
+
+.rism-logo{
+  height: 30px;
+}
+
+.partner-separator{
+  width:100%;
+  height:1px;
+  background: rgba(75,85,99,0.32);
+  margin: 2px 0 4px;
+}
+
+.partner-line{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 9px;
+  width:100%;
   color:var(--muted);
   font-size:0.78rem;
   line-height:1.0;
   white-space:nowrap;
-  text-align:center;
+}
+
+.partner-text{
+  display:inline-block;
 }
 
 .rism-slot{
