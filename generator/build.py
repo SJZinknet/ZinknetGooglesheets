@@ -583,21 +583,23 @@ h1{
 .right{
   display:flex;
   flex-direction:column;
-  align-items:flex-end;
-  gap: 3px;
+  align-items:center;
+  gap: 5px;
   padding-top: 1px;
+  text-align:center;
 }
 .hem-logo,.rism-logo{
   display:block;
   width:auto;
   filter: drop-shadow(0 8px 18px rgba(15,23,42,0.10));
 }
-.hem-logo{ height: 58px; }
+.hem-logo{ height: 64px; }
 .rism-logo{ height: 30px; }
 
 .collab-line{
   display:flex;
   align-items:center;
+  justify-content:center;
   gap: 8px;
   color:var(--muted);
   font-size:0.78rem;
