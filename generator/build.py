@@ -2,10 +2,21 @@
 # ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
-# Notes RISM UI (as agreed):
-# - Index: date appears as a small neutral pill before the title.
-# - Detail pages: remove RISM Date chip from tags; keep Date inside the RISM drawer.
-# - RISM drawer: remove demo/parasite text + remove "open/close" pill; keep labels "Date" and "Holdings".
+# Current index/search features:
+# - Sort by: Default order / Composer A–Z / Source date earliest first / Source date latest first
+# - Specific RISM number filter, in addition to RISM No. being searchable globally
+# - Bibliography:
+#     * included in global search
+#     * dedicated wide multi-select filter
+#     * references split by line breaks
+#     * Match any / Match all
+# - Holdings / Libraries:
+#     * dedicated searchable multi-select filter
+#     * RISM Holdings sigla used when available
+#     * Library-ies (public) sigla used only when no usable RISM Holdings sigla exists
+#     * Match any / Match all
+# - Smart collection filtering for Search Tool, chronology, composer, bibliography,
+#   holdings/libraries, and RISM number.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -57,6 +68,10 @@ EM_TITLES = [
     "Vocal Music",
 ]
 EM_TITLES_SORTED = sorted(EM_TITLES, key=len, reverse=True)
+
+SIGLUM_RE = re.compile(r'(?<![A-Za-zÀ-ÖØ-öø-ÿ0-9])([A-Z]{1,3}-[A-Za-zÀ-ÖØ-öø-ÿ0-9?]+)')
+RISM_HOLDING_PAREN_RE = re.compile(r'\(([^()]*)\)')
+RISM_SIGLUM_FULL_RE = re.compile(r'^[A-Z]{1,3}-[A-Za-zÀ-ÖØ-öø-ÿ0-9?]+$')
 
 # =========================
 # HELPERS
@@ -134,6 +149,16 @@ def parse_conc_ids(s):
     s = s.replace("[", "").replace("]", "")
     parts = re.split(r"[;,\n]+", s)
     return [p.strip() for p in parts if p.strip()]
+
+def unique_preserve_order(items):
+    seen = set()
+    out = []
+    for item in items:
+        key = item
+        if key not in seen:
+            seen.add(key)
+            out.append(item)
+    return out
 
 def format_uniform_instr(raw_text, alternative=False):
     """
@@ -292,6 +317,67 @@ def manuscript_details_for_filter(raw):
 
     return out
 
+def bibliography_refs(raw):
+    """
+    Split bibliography cells into individual references.
+    In the sheet, multiple references are separated by line breaks.
+    """
+    s = clean_str(raw)
+    if not s:
+        return []
+    refs = []
+    for part in re.split(r"\r?\n+", s):
+        part = re.sub(r"\s+", " ", part).strip()
+        if part:
+            refs.append(part)
+    return unique_preserve_order(refs)
+
+def rism_holdings_sigla(raw):
+    """
+    Extract sigla from RISM Holdings.
+    Holdings lines reliably contain the RISM siglum in parentheses.
+
+    "(No holdings found)" is not usable as holdings data and returns [].
+    """
+    s = clean_str(raw)
+    if not s:
+        return []
+    if re.search(r"no\s+holdings\s+found", s, flags=re.I):
+        return []
+
+    out = []
+    for line in re.split(r"\r?\n+", s):
+        for m in RISM_HOLDING_PAREN_RE.finditer(line):
+            candidate = m.group(1).strip()
+            if RISM_SIGLUM_FULL_RE.fullmatch(candidate):
+                out.append(candidate)
+    return unique_preserve_order(out)
+
+def public_library_sigla(raw):
+    """
+    Extract sigla from Library-ies (public).
+    "[See RISM]" markers are ignored.
+    This field is used only when no usable RISM Holdings sigla exist.
+    """
+    s = clean_str(raw)
+    if not s:
+        return []
+
+    s = re.sub(r"\[\s*see\s+rism\s*\]", " ", s, flags=re.I)
+    matches = SIGLUM_RE.findall(s)
+    return unique_preserve_order(matches)
+
+def holdings_libraries_sigla(holdings_raw, library_raw):
+    """
+    Filter logic requested by the project:
+      - if RISM Holdings yields actual sigla, use those and ignore Library-ies (public);
+      - otherwise, fall back to Library-ies (public).
+    """
+    from_rism = rism_holdings_sigla(holdings_raw)
+    if from_rism:
+        return from_rism
+    return public_library_sigla(library_raw)
+
 def norm_url(u):
     return clean_str(u).strip()
 
@@ -300,6 +386,9 @@ def composer_tokens(raw):
     s = re.sub(r"[^a-zà-öø-ÿ\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+def sort_text_key(raw):
+    return clean_str(raw).casefold()
 
 # =========================
 # Search Tool parser (scenario-based)
@@ -595,13 +684,6 @@ h1{
   max-width: 100%;
 }
 
-/*
-  Header right area:
-  HEM and RISM are in the same vertical logo column.
-  Therefore their centres are aligned with each other.
-  The text "In collaboration with" sits beside that column
-  and does not affect the logo alignment.
-*/
 .right{
   display:flex;
   align-items:flex-end;
@@ -704,6 +786,46 @@ h1{
   color:var(--muted);
 }
 
+.catalogue-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.catalogue-head h2{
+  margin:0;
+}
+
+.catalogue-sort{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.catalogue-sort label{
+  margin:0;
+  font-size:0.72rem;
+  text-transform:uppercase;
+  letter-spacing:.13em;
+  color:var(--muted);
+}
+
+.catalogue-sort select{
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--border-subtle);
+  background:#fafaff;
+  color:var(--text);
+  font-family:inherit;
+  font-size:0.82rem;
+  outline:none;
+  cursor:pointer;
+}
+
 .filters label {
   display:block;
   font-size:0.78rem;
@@ -743,6 +865,142 @@ h1{
 .filters-row { display:flex; flex-direction:column; gap:10px; }
 .filter-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .filter-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+
+.filter-mode-row{
+  margin-bottom:6px;
+}
+
+.filter-mode-row select{
+  font-size:0.8rem;
+  padding:6px 9px;
+}
+
+.filter-dropdown-wrap{
+  position:relative;
+}
+
+.wide-dropdown-toggle{
+  width:100%;
+  text-align:left;
+  border-radius:14px;
+  border:1px solid var(--border-subtle);
+  background:#fafaff;
+  color:var(--text);
+  padding:8px 11px;
+  font-size:0.88rem;
+  cursor:pointer;
+}
+
+.wide-dropdown-toggle:hover{
+  border-color:var(--border-strong);
+}
+
+.wide-dropdown-menu{
+  display:none;
+  position:absolute;
+  z-index:80;
+  top:calc(100% + 5px);
+  left:0;
+  width:min(760px, calc(100vw - 54px));
+  max-height:360px;
+  overflow:auto;
+  padding:7px;
+  background:#ffffff;
+  border:1px solid var(--border-subtle);
+  border-radius:16px;
+  box-shadow:0 18px 42px rgba(15,23,42,0.18);
+}
+
+.wide-dropdown-item{
+  width:100%;
+  display:block;
+  border:none;
+  background:transparent;
+  text-align:left;
+  padding:9px 10px;
+  border-radius:12px;
+  cursor:pointer;
+  color:var(--text);
+  font-size:0.86rem;
+  line-height:1.35;
+  white-space:normal;
+}
+
+.wide-dropdown-item:hover{
+  background:rgba(35,75,184,0.06);
+}
+
+.wide-dropdown-item.is-selected{
+  background:rgba(139,92,246,0.10);
+  color:var(--violet-text);
+  font-weight:650;
+}
+
+.active-filter-chips{
+  margin-top:7px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+.active-filter-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  max-width:100%;
+  border:1px solid var(--tag-neutral-border);
+  background:#ffffff;
+  color:var(--muted);
+  border-radius:999px;
+  padding:3px 8px;
+  font-size:0.72rem;
+  cursor:pointer;
+}
+
+.active-filter-chip .chip-text{
+  display:inline-block;
+  max-width:235px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.active-filter-chip:hover{
+  border-color:var(--violet-border);
+  color:var(--violet-text);
+}
+
+.library-menu{
+  display:none;
+  position:relative;
+}
+
+.library-menu .library-list{
+  position:absolute;
+  top:4px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid var(--border-subtle);
+  border-radius:14px;
+  box-shadow:0 14px 30px rgba(15,23,42,0.10);
+  max-height:260px;
+  overflow:auto;
+  z-index:80;
+  padding:6px;
+}
+
+.library-item{
+  padding:7px 10px;
+  border-radius:12px;
+  cursor:pointer;
+  font-size:0.9rem;
+  color:var(--text);
+}
+
+.library-item:hover{
+  background: rgba(35,75,184,0.06);
+}
 
 .entries {
   max-height: calc(100vh - 170px);
@@ -1228,7 +1486,7 @@ dd.meta-value {
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
   max-height:240px;
   overflow:auto;
-  z-index:50;
+  z-index:80;
   padding:6px;
 }
 
@@ -1366,6 +1624,28 @@ def holdings_list_html(txt):
     lis = "".join(f"<li>{html.escape(ln, quote=False)}</li>" for ln in lines)
     return f'<ul class="rism-holdings">{lis}</ul>'
 
+def json_attr(obj):
+    return escape_attr(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))
+
+def piece_value_payload(records, piece_ids, value_getter, header_rec=None):
+    """
+    Produce JSON payload for piece-level filters.
+    For collections, a matching collection/header notice is added as "__HEADER__".
+    """
+    payload = []
+    if header_rec is not None:
+        header_values = value_getter(header_rec)
+        if header_values:
+            payload.append({"pid": "__HEADER__", "values": header_values})
+
+    for pid in piece_ids:
+        rr = records.get(pid)
+        if not rr:
+            continue
+        values = value_getter(rr)
+        payload.append({"pid": pid, "values": values})
+    return payload
+
 # =========================
 # HTML templates
 # =========================
@@ -1388,7 +1668,7 @@ index_template = """<!doctype html>
 
           <div>
             <label for="searchInput">Global search</label>
-            <input id="searchInput" type="text" placeholder="Composer, title, number, library…" />
+            <input id="searchInput" type="text" placeholder="Composer, title, number, library, bibliography…" />
           </div>
 
           <div style="position:relative;">
@@ -1470,6 +1750,43 @@ index_template = """<!doctype html>
           </div>
 
           <div>
+            <label>Bibliography</label>
+            <div class="filter-inline filter-mode-row">
+              <select id="bibMatchMode" aria-label="Bibliography matching mode">
+                <option value="any">Match any</option>
+                <option value="all">Match all</option>
+              </select>
+            </div>
+            <div class="filter-dropdown-wrap">
+              <button id="bibToggle" type="button" class="wide-dropdown-toggle">All bibliographic references</button>
+              <div id="bibMenu" class="wide-dropdown-menu">
+                <div id="bibList"></div>
+              </div>
+            </div>
+            <div id="bibActive" class="active-filter-chips"></div>
+          </div>
+
+          <div style="position:relative;">
+            <label for="libraryInput">Holdings / Libraries</label>
+            <div class="filter-inline filter-mode-row">
+              <select id="libraryMatchMode" aria-label="Holdings or libraries matching mode">
+                <option value="any">Match any</option>
+                <option value="all">Match all</option>
+              </select>
+            </div>
+            <input id="libraryInput" type="text" placeholder="Type a library siglum: GB-Lbl, A-Wn…" autocomplete="off" />
+            <div class="library-menu" id="libraryMenu">
+              <div class="library-list" id="libraryList"></div>
+            </div>
+            <div id="libraryActive" class="active-filter-chips"></div>
+          </div>
+
+          <div>
+            <label for="rismNoInput">RISM number</label>
+            <input id="rismNoInput" type="text" inputmode="numeric" placeholder="e.g. 990000327" />
+          </div>
+
+          <div>
             <button id="clearAllFilters" type="button" class="tag" style="cursor:pointer; width:100%; padding:7px 11px;">
               Clear all filters
             </button>
@@ -1480,7 +1797,18 @@ index_template = """<!doctype html>
     </section>
 
     <section class="card">
-      <h2>Catalogue</h2>
+      <div class="catalogue-head">
+        <h2>Catalogue</h2>
+        <div class="catalogue-sort">
+          <label for="sortBy">Sort by</label>
+          <select id="sortBy">
+            <option value="default">Default order</option>
+            <option value="composer">Composer A–Z</option>
+            <option value="date-asc">Source date: earliest first</option>
+            <option value="date-desc">Source date: latest first</option>
+          </select>
+        </div>
+      </div>
       <div id="entries" class="entries">
 @@ENTRIES@@
       </div>
@@ -1505,6 +1833,21 @@ index_template = """<!doctype html>
   const msDetailBlock = document.getElementById('msDetailBlock');
   const msDetailFilter = document.getElementById('msDetailFilter');
   const clearAllFilters = document.getElementById('clearAllFilters');
+
+  const bibToggle = document.getElementById('bibToggle');
+  const bibMenu = document.getElementById('bibMenu');
+  const bibList = document.getElementById('bibList');
+  const bibActive = document.getElementById('bibActive');
+  const bibMatchMode = document.getElementById('bibMatchMode');
+
+  const libraryInput = document.getElementById('libraryInput');
+  const libraryMenu = document.getElementById('libraryMenu');
+  const libraryList = document.getElementById('libraryList');
+  const libraryActive = document.getElementById('libraryActive');
+  const libraryMatchMode = document.getElementById('libraryMatchMode');
+
+  const rismNoInput = document.getElementById('rismNoInput');
+  const sortBy = document.getElementById('sortBy');
 
   const entriesContainer = document.getElementById('entries');
   const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
@@ -1536,11 +1879,94 @@ index_template = """<!doctype html>
   }
 
   function normalize(s){ return (s || '').toLowerCase(); }
-  function normSpaces(s){ return (s || '').replace(/\\s+/g,' ').trim(); }
+  function normalizeLoose(s){ return (s || '').toLowerCase().replace(/\\s+/g,' ').trim(); }
+  function normalizeRismNo(s){ return (s || '').replace(/\\D+/g,''); }
   function parseIntSafe(x){
     const n = parseInt(x, 10);
     return Number.isFinite(n) ? n : null;
   }
+
+  function parseJsonDataset(card, datasetKey, cacheKey){
+    if(card[cacheKey]) return card[cacheKey];
+    const raw = card.dataset[datasetKey] || '[]';
+    try {
+      card[cacheKey] = JSON.parse(raw);
+    } catch(err) {
+      card[cacheKey] = [];
+    }
+    return card[cacheKey];
+  }
+
+  function intersectsOrContains(values, selected, mode){
+    if(!selected.length) return true;
+    const valSet = new Set(values || []);
+    if(mode === 'all'){
+      return selected.every(v => valSet.has(v));
+    }
+    return selected.some(v => valSet.has(v));
+  }
+
+  // ============ Sort controls
+  function compareDefault(a, b){
+    const aa = parseIntSafe(a.dataset.sortDefault);
+    const bb = parseIntSafe(b.dataset.sortDefault);
+    return (aa ?? Number.MAX_SAFE_INTEGER) - (bb ?? Number.MAX_SAFE_INTEGER);
+  }
+
+  function compareText(a, b){
+    return (a || '').localeCompare((b || ''), undefined, {sensitivity:'base'});
+  }
+
+  function compareComposer(a, b){
+    const am = a.dataset.sortComposerMissing === '1';
+    const bm = b.dataset.sortComposerMissing === '1';
+    if(am !== bm) return am ? 1 : -1;
+
+    const cmp = compareText(a.dataset.sortComposer || '', b.dataset.sortComposer || '');
+    if(cmp !== 0) return cmp;
+    return compareDefault(a, b);
+  }
+
+  function compareDateAsc(a, b){
+    const ay = parseIntSafe(a.dataset.sortYearStart);
+    const by = parseIntSafe(b.dataset.sortYearStart);
+    const am = ay === null;
+    const bm = by === null;
+    if(am !== bm) return am ? 1 : -1;
+    if(!am && ay !== by) return ay - by;
+    return compareDefault(a, b);
+  }
+
+  function compareDateDesc(a, b){
+    const ay = parseIntSafe(a.dataset.sortYearEnd);
+    const by = parseIntSafe(b.dataset.sortYearEnd);
+    const am = ay === null;
+    const bm = by === null;
+    if(am !== bm) return am ? 1 : -1;
+    if(!am && ay !== by) return by - ay;
+    return compareDefault(a, b);
+  }
+
+  function applySort(){
+    const mode = sortBy.value || 'default';
+    const ordered = [...cards];
+
+    if(mode === 'composer'){
+      ordered.sort(compareComposer);
+    } else if(mode === 'date-asc'){
+      ordered.sort(compareDateAsc);
+    } else if(mode === 'date-desc'){
+      ordered.sort(compareDateDesc);
+    } else {
+      ordered.sort(compareDefault);
+    }
+
+    ordered.forEach(card => entriesContainer.appendChild(card));
+  }
+
+  sortBy.addEventListener('change', () => {
+    applySort();
+  });
 
   // ============ Composer dropdown
   const WORD_RE = /[A-Za-zÀ-ÖØ-öø-ÿ]+/g;
@@ -1603,12 +2029,6 @@ index_template = """<!doctype html>
   composerInput.addEventListener('focus', () => {
     const hits = computeComposerHits();
     if(hits.length) openComposerMenu(hits);
-  });
-
-  document.addEventListener('click', (ev) => {
-    if(!composerMenu.contains(ev.target) && ev.target !== composerInput){
-      closeComposerMenu();
-    }
   });
 
   // ============ Search Tool controls
@@ -1675,6 +2095,176 @@ index_template = """<!doctype html>
       msDetailBlock.style.display = 'none';
     }
   }
+
+  // ============ Bibliography multi-select
+  const BIBLIO_OPTIONS = @@BIBLIO_OPTIONS@@;
+  const selectedBibliography = [];
+
+  function shortLabel(text, maxLen=88){
+    const s = text || '';
+    return s.length > maxLen ? `${s.slice(0, maxLen - 1)}…` : s;
+  }
+
+  function closeBibMenu(){
+    bibMenu.style.display = 'none';
+  }
+
+  function openBibMenu(){
+    bibMenu.style.display = 'block';
+  }
+
+  function toggleBibMenu(){
+    if(bibMenu.style.display === 'block') closeBibMenu();
+    else openBibMenu();
+  }
+
+  function renderBibliographyOptions(){
+    bibList.innerHTML = '';
+    BIBLIO_OPTIONS.forEach(ref => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'wide-dropdown-item';
+      if(selectedBibliography.includes(ref)) btn.classList.add('is-selected');
+      btn.textContent = ref;
+      btn.title = ref;
+      btn.addEventListener('click', () => {
+        const idx = selectedBibliography.indexOf(ref);
+        if(idx >= 0) selectedBibliography.splice(idx, 1);
+        else selectedBibliography.push(ref);
+        renderBibliographyOptions();
+        renderBibliographyChips();
+        applyFilters();
+      });
+      bibList.appendChild(btn);
+    });
+  }
+
+  function renderBibliographyChips(){
+    bibActive.innerHTML = '';
+    selectedBibliography.forEach(ref => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'active-filter-chip';
+      chip.title = `Click to remove: ${ref}`;
+
+      const text = document.createElement('span');
+      text.className = 'chip-text';
+      text.textContent = shortLabel(ref, 62);
+
+      const x = document.createElement('span');
+      x.textContent = '×';
+
+      chip.appendChild(text);
+      chip.appendChild(x);
+      chip.addEventListener('click', () => {
+        const idx = selectedBibliography.indexOf(ref);
+        if(idx >= 0) selectedBibliography.splice(idx, 1);
+        renderBibliographyOptions();
+        renderBibliographyChips();
+        applyFilters();
+      });
+      bibActive.appendChild(chip);
+    });
+
+    if(selectedBibliography.length){
+      bibToggle.textContent = `${selectedBibliography.length} bibliographic reference${selectedBibliography.length===1?'':'s'} selected`;
+    } else {
+      bibToggle.textContent = 'All bibliographic references';
+    }
+  }
+
+  bibToggle.addEventListener('click', toggleBibMenu);
+  bibMatchMode.addEventListener('change', applyFilters);
+
+  renderBibliographyOptions();
+  renderBibliographyChips();
+
+  // ============ Holdings / Libraries multi-select
+  const LIBRARY_OPTIONS = @@LIBRARY_OPTIONS@@;
+  const LIBRARY_DISPLAY = new Map(LIBRARY_OPTIONS.map(o => [o.k, o.d]));
+  const selectedLibraries = [];
+
+  function closeLibraryMenu(){
+    libraryMenu.style.display = 'none';
+    libraryList.innerHTML = '';
+  }
+
+  function openLibraryMenu(items){
+    libraryList.innerHTML = '';
+    items.forEach(obj => {
+      const div = document.createElement('div');
+      div.className = 'library-item';
+      div.textContent = obj.d;
+      div.title = obj.d;
+      div.addEventListener('click', () => {
+        if(!selectedLibraries.includes(obj.k)){
+          selectedLibraries.push(obj.k);
+        }
+        libraryInput.value = '';
+        closeLibraryMenu();
+        renderLibraryChips();
+        applyFilters();
+      });
+      libraryList.appendChild(div);
+    });
+    libraryMenu.style.display = items.length ? 'block' : 'none';
+  }
+
+  function computeLibraryHits(){
+    const q = normalizeLoose(libraryInput.value);
+    if(!q) return [];
+    const hits = [];
+    for(const obj of LIBRARY_OPTIONS){
+      const display = normalizeLoose(obj.d);
+      const key = normalizeLoose(obj.k);
+      if(display.includes(q) || key.includes(q)){
+        hits.push(obj);
+        if(hits.length >= 40) break;
+      }
+    }
+    return hits;
+  }
+
+  function renderLibraryChips(){
+    libraryActive.innerHTML = '';
+    selectedLibraries.forEach(k => {
+      const display = LIBRARY_DISPLAY.get(k) || k;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'active-filter-chip';
+      chip.title = `Click to remove: ${display}`;
+
+      const text = document.createElement('span');
+      text.className = 'chip-text';
+      text.textContent = display;
+
+      const x = document.createElement('span');
+      x.textContent = '×';
+
+      chip.appendChild(text);
+      chip.appendChild(x);
+      chip.addEventListener('click', () => {
+        const idx = selectedLibraries.indexOf(k);
+        if(idx >= 0) selectedLibraries.splice(idx, 1);
+        renderLibraryChips();
+        applyFilters();
+      });
+      libraryActive.appendChild(chip);
+    });
+  }
+
+  libraryInput.addEventListener('input', () => {
+    const hits = computeLibraryHits();
+    if(!hits.length) closeLibraryMenu();
+    else openLibraryMenu(hits);
+  });
+
+  libraryInput.addEventListener('focus', () => {
+    const hits = computeLibraryHits();
+    if(hits.length) openLibraryMenu(hits);
+  });
+
+  libraryMatchMode.addEventListener('change', applyFilters);
 
   // ============ Organology link filter
   // Supported URL fragments:
@@ -1756,6 +2346,20 @@ index_template = """<!doctype html>
     msDetailFilter.value = '';
     updateMsDetailVisibility();
 
+    selectedBibliography.length = 0;
+    bibMatchMode.value = 'any';
+    closeBibMenu();
+    renderBibliographyOptions();
+    renderBibliographyChips();
+
+    selectedLibraries.length = 0;
+    libraryMatchMode.value = 'any';
+    libraryInput.value = '';
+    closeLibraryMenu();
+    renderLibraryChips();
+
+    rismNoInput.value = '';
+
     clearOrgHash();
     orgFilterBadge.style.display = 'none';
     orgFilterBadge.textContent = '';
@@ -1772,7 +2376,7 @@ index_template = """<!doctype html>
 
   clearAllFilters.addEventListener('click', clearAllFiltersFn);
 
-  // ============ Cache parsers per card
+  // ============ Existing parsers per card
   function parseSearchToolPieces(card){
     if(card.__stPieces) return card.__stPieces;
 
@@ -1837,6 +2441,20 @@ index_template = """<!doctype html>
     return pieces;
   }
 
+  // ============ New JSON parsers per card
+  function parseBiblioPieces(card){
+    return parseJsonDataset(card, 'biblioPieces', '__biblioPieces');
+  }
+
+  function parseLibraryPieces(card){
+    return parseJsonDataset(card, 'libraryPieces', '__libraryPieces');
+  }
+
+  function parseRismNumberPieces(card){
+    return parseJsonDataset(card, 'rismPieces', '__rismPieces');
+  }
+
+  // ============ Matching logic: Search Tool
   function ruleOk(val, rule){
     const n = rule.n;
     const cmp = rule.cmp;
@@ -1874,6 +2492,7 @@ index_template = """<!doctype html>
     return {ok: matchPids.size > 0, matchPids};
   }
 
+  // ============ Matching logic: Year filter
   function overlapsYearRange(rmin, rmax, fromY, toY){
     if(fromY !== null && rmax < fromY) return false;
     if(toY   !== null && rmin > toY)   return false;
@@ -1901,6 +2520,63 @@ index_template = """<!doctype html>
     return {ok: matchPids.size > 0, matchPids};
   }
 
+  // ============ Matching logic: Bibliography
+  function matchesBibliographyFilter(card){
+    if(!selectedBibliography.length) return {ok:true, matchPids:new Set()};
+
+    const mode = bibMatchMode.value || 'any';
+    const pieces = parseBiblioPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
+
+    const matchPids = new Set();
+    for(const p of pieces){
+      const values = p.values || [];
+      if(intersectsOrContains(values, selectedBibliography, mode)){
+        matchPids.add(p.pid);
+      }
+    }
+
+    return {ok: matchPids.size > 0, matchPids};
+  }
+
+  // ============ Matching logic: Holdings / Libraries
+  function matchesLibraryFilter(card){
+    if(!selectedLibraries.length) return {ok:true, matchPids:new Set()};
+
+    const mode = libraryMatchMode.value || 'any';
+    const pieces = parseLibraryPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
+
+    const matchPids = new Set();
+    for(const p of pieces){
+      const values = p.values || [];
+      if(intersectsOrContains(values, selectedLibraries, mode)){
+        matchPids.add(p.pid);
+      }
+    }
+
+    return {ok: matchPids.size > 0, matchPids};
+  }
+
+  // ============ Matching logic: RISM number
+  function matchesRismNumberFilter(card){
+    const query = normalizeRismNo(rismNoInput.value);
+    if(!query) return {ok:true, matchPids:new Set()};
+
+    const pieces = parseRismNumberPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
+
+    const matchPids = new Set();
+    for(const p of pieces){
+      const values = p.values || [];
+      const okPiece = values.some(v => normalizeRismNo(v).includes(query));
+      if(okPiece) matchPids.add(p.pid);
+    }
+
+    return {ok: matchPids.size > 0, matchPids};
+  }
+
+  // ============ Composer match set
   function composerMatchSet(card){
     if(!composerSelected) return {ok:true, matchPids:null};
 
@@ -1934,6 +2610,7 @@ index_template = """<!doctype html>
     return {ok:false, matchPids:new Set()};
   }
 
+  // ============ Highlight + smart collection view
   function applyCollectionView(card, showSet){
     const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
     if(!lines.length) return;
@@ -1963,7 +2640,7 @@ index_template = """<!doctype html>
     }
   }
 
-  // ============ Populate filters
+  // ============ Populate basic filters
   const musicSet = new Set();
   const sourceCategorySet = new Set();
   const msDetailSet = new Set();
@@ -2031,7 +2708,17 @@ index_template = """<!doctype html>
     const stActiveOn = stRules.length > 0;
     const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
     const compActiveOn = !!composerSelected;
-    const pieceLevelActive = stActiveOn || yrActiveOn || compActiveOn;
+    const bibActiveOn = selectedBibliography.length > 0;
+    const libraryActiveOn = selectedLibraries.length > 0;
+    const rismActiveOn = !!normalizeRismNo(rismNoInput.value);
+
+    const pieceLevelActive =
+      stActiveOn ||
+      yrActiveOn ||
+      compActiveOn ||
+      bibActiveOn ||
+      libraryActiveOn ||
+      rismActiveOn;
 
     cards.forEach(card => {
       const text  = normalize(card.dataset.search);
@@ -2062,14 +2749,35 @@ index_template = """<!doctype html>
         if(!yrMatch.ok) ok = false;
       }
 
+      let bibMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        bibMatch = matchesBibliographyFilter(card);
+        if(!bibMatch.ok) ok = false;
+      }
+
+      let libraryMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        libraryMatch = matchesLibraryFilter(card);
+        if(!libraryMatch.ok) ok = false;
+      }
+
+      let rismMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        rismMatch = matchesRismNumberFilter(card);
+        if(!rismMatch.ok) ok = false;
+      }
+
       let showSet = null;
       const hasLines = card.querySelector('.subpiece-line[data-pid]') !== null;
 
-      if(hasLines && ok && (stActiveOn || yrActiveOn || compActiveOn)){
+      if(hasLines && ok && pieceLevelActive){
         const sets = [];
         if(compActiveOn && compMatch.matchPids) sets.push(compMatch.matchPids);
         if(stActiveOn) sets.push(stMatch.matchPids);
         if(yrActiveOn) sets.push(yrMatch.matchPids);
+        if(bibActiveOn) sets.push(bibMatch.matchPids);
+        if(libraryActiveOn) sets.push(libraryMatch.matchPids);
+        if(rismActiveOn) sets.push(rismMatch.matchPids);
 
         if(sets.length){
           showSet = new Set(sets[0]);
@@ -2101,6 +2809,7 @@ index_template = """<!doctype html>
     updateResultCount(visible, matchingPieces, pieceLevelActive);
   }
 
+  // ============ Listeners
   searchInput.addEventListener('input', applyFilters);
   instrInput.addEventListener('input', applyFilters);
   yearFrom.addEventListener('input', applyFilters);
@@ -2111,7 +2820,21 @@ index_template = """<!doctype html>
     applyFilters();
   });
   msDetailFilter.addEventListener('change', applyFilters);
+  rismNoInput.addEventListener('input', applyFilters);
 
+  document.addEventListener('click', (ev) => {
+    if(!composerMenu.contains(ev.target) && ev.target !== composerInput){
+      closeComposerMenu();
+    }
+    if(!libraryMenu.contains(ev.target) && ev.target !== libraryInput){
+      closeLibraryMenu();
+    }
+    if(!bibMenu.contains(ev.target) && ev.target !== bibToggle){
+      closeBibMenu();
+    }
+  });
+
+  applySort();
   applyFilters();
 </script>
 </body>
@@ -2247,9 +2970,14 @@ def main():
         rec["organology"] = escape_textnode(rec["organology_raw"])
 
         rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
-
         rec["year_min"] = parse_int_safe(rec["rism_earliest_year_raw"])
         rec["year_max"] = parse_int_safe(rec["rism_latest_year_raw"])
+        rec["bibliography_refs"] = bibliography_refs(rec["bibliography_raw"])
+        rec["holdings_library_sigla_raw"] = holdings_libraries_sigla(
+            rec["rism_holdings_raw"],
+            rec["library_raw"]
+        )
+        rec["holdings_library_sigla_keys"] = [s.casefold() for s in rec["holdings_library_sigla_raw"]]
 
         records[zid] = rec
 
@@ -2282,8 +3010,12 @@ def main():
                 "rism_holdings_raw": "", "rism_date_raw": "",
                 "rism_earliest_year_raw": "", "rism_latest_year_raw": "",
                 "year_min": None, "year_max": None,
+                "bibliography_refs": [],
+                "holdings_library_sigla_raw": [],
+                "holdings_library_sigla_keys": [],
             }
 
+    # Global Search Tool instrument index
     all_instr = set()
     instr_freq = {}
     for rec in records.values():
@@ -2301,6 +3033,7 @@ def main():
         ensure_ascii=False
     )
 
+    # Composer dropdown index
     composer_set = sorted(
         {records[z]["composer_raw"] for z in records if records[z].get("composer_raw")},
         key=lambda s: s.lower()
@@ -2310,13 +3043,34 @@ def main():
         ensure_ascii=False
     )
 
+    # Bibliography options
+    bibliography_options = sorted(
+        {ref for rec in records.values() for ref in rec.get("bibliography_refs", [])},
+        key=lambda s: s.casefold()
+    )
+    bibliography_options_js = json.dumps(bibliography_options, ensure_ascii=False)
+
+    # Holdings / libraries options
+    # Dedupe case-insensitively while preserving a preferred display form.
+    library_display_by_key = {}
+    for rec in records.values():
+        for raw_siglum in rec.get("holdings_library_sigla_raw", []):
+            key = raw_siglum.casefold()
+            library_display_by_key.setdefault(key, raw_siglum)
+
+    library_options = [
+        {"k": k, "d": d}
+        for k, d in sorted(library_display_by_key.items(), key=lambda kv: kv[1].casefold())
+    ]
+    library_options_js = json.dumps(library_options, ensure_ascii=False)
+
     # =========================
     # INDEX BUILD
     # =========================
     group_html_parts = []
     sorted_group_ids = sorted(groups.keys(), key=lambda g: parse_zinknet(g))
 
-    for gid in sorted_group_ids:
+    for default_order_idx, gid in enumerate(sorted_group_ids):
         ids = groups[gid]
         coll_id = next((z for z in ids if records.get(z, {}).get("indiv_coll") == "Coll."), None)
         is_virtual_collection = gid in virtual_headers
@@ -2327,11 +3081,7 @@ def main():
 
         used_links_tags = set()
 
-        # =========================
-        # INDEX CARD TAGS
-        # =========================
-        # Left tags: music/source/RISM/concordances.
-        # Right tags: collection piece count.
+        # Index card tags
         tags_left_html = []
         tags_right_html = []
 
@@ -2354,14 +3104,7 @@ def main():
             nb_pieces = max(nb_pieces, 0)
             tags_right_html.append(f'<span class="tag tag-count">{nb_pieces} piece{"s" if nb_pieces != 1 else ""}</span>')
 
-        # =========================
-        # INDEX CARD TYPOGRAPHY
-        # =========================
-        # Visual hierarchy:
-        # - ZINKNET number/cote = discreet
-        # - Composer = main line
-        # - Date = small neutral pill immediately before the title
-        # - Title = secondary line
+        # Index card typography
         rism_dates = sorted({
             clean_str(records[z].get("rism_date_raw", "")).strip()
             for z in ids
@@ -2462,14 +3205,7 @@ def main():
         else:
             title_line_html = ""
 
-        if composer_txt:
-            composer_main_html = f"""
-          <div class="entry-composer-main" style="font-size:1.05rem; font-weight:750; color:#020617; line-height:1.15; margin-top:1px;">
-            {composer_txt}
-          </div>"""
-        else:
-            composer_main_html = ""
-
+        # Full-text search blob
         search_blob_parts = []
         for z in ids:
             rr = records[z]
@@ -2479,6 +3215,8 @@ def main():
                 rr["library_raw"], rr["shelfmark_raw"],
                 rr["music_type_raw"], rr["source_type_raw"],
                 rr["note_raw"], rr["organology_raw"],
+                rr["rism_no_raw"],
+                rr["bibliography_raw"],
                 rr.get("rism_date_raw",""),
                 rr.get("rism_holdings_raw",""),
             ])
@@ -2550,6 +3288,7 @@ def main():
 
         line_ids = [z for z in ids if not (coll_id and z == coll_id)]
 
+        # Search Tool per-piece dataset
         piece_chunks = []
         for z in line_ids if (coll_id or is_virtual_collection) else [header_id]:
             rr = records[z]
@@ -2564,6 +3303,7 @@ def main():
             piece_chunks.append(f"{z}@@{'||'.join(sc_keys)}")
         stool_pieces_blob = "##".join(piece_chunks)
 
+        # Year per-piece dataset
         yr_chunks = []
         if coll_id or is_virtual_collection:
             year_ids = list(line_ids)
@@ -2585,6 +3325,49 @@ def main():
 
         yr_pieces_blob = "##".join(yr_chunks)
 
+        # New piece-level JSON datasets
+        header_for_json = hrec if (coll_id or is_virtual_collection) else None
+        data_piece_ids = line_ids if (coll_id or is_virtual_collection) else [header_id]
+
+        biblio_payload = piece_value_payload(
+            records,
+            data_piece_ids,
+            lambda rr: rr.get("bibliography_refs", []),
+            header_rec=header_for_json,
+        )
+        library_payload = piece_value_payload(
+            records,
+            data_piece_ids,
+            lambda rr: rr.get("holdings_library_sigla_keys", []),
+            header_rec=header_for_json,
+        )
+        rism_payload = piece_value_payload(
+            records,
+            data_piece_ids,
+            lambda rr: [rr["rism_no_raw"]] if rr.get("rism_no_raw") else [],
+            header_rec=header_for_json,
+        )
+
+        # Sort metadata
+        sort_composer_raw = hrec.get("composer_raw", "")
+        if not sort_composer_raw:
+            group_composers = sorted(
+                {records[z].get("composer_raw", "") for z in ids if records[z].get("composer_raw", "")},
+                key=lambda s: s.casefold()
+            )
+            if len(group_composers) == 1:
+                sort_composer_raw = group_composers[0]
+
+        sort_composer_missing = "0" if sort_composer_raw else "1"
+
+        h_year_min = hrec.get("year_min", None)
+        h_year_max = hrec.get("year_max", None)
+        group_year_mins = [records[z].get("year_min") for z in ids if records[z].get("year_min") is not None]
+        group_year_maxs = [records[z].get("year_max") for z in ids if records[z].get("year_max") is not None]
+
+        sort_year_start = h_year_min if h_year_min is not None else (min(group_year_mins) if group_year_mins else "")
+        sort_year_end = h_year_max if h_year_max is not None else (max(group_year_maxs) if group_year_maxs else "")
+
         open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
 
         group_html_parts.append(f"""
@@ -2597,7 +3380,15 @@ def main():
       data-ms-details="{escape_attr('||'.join(ms_details_set))}"
       data-instr="{escape_attr(instr_blob)}"
       data-stool-pieces="{escape_attr(stool_pieces_blob)}"
-      data-yr-pieces="{escape_attr(yr_pieces_blob)}">
+      data-yr-pieces="{escape_attr(yr_pieces_blob)}"
+      data-biblio-pieces="{json_attr(biblio_payload)}"
+      data-library-pieces="{json_attr(library_payload)}"
+      data-rism-pieces="{json_attr(rism_payload)}"
+      data-sort-default="{default_order_idx}"
+      data-sort-composer="{escape_attr(sort_composer_raw)}"
+      data-sort-composer-missing="{sort_composer_missing}"
+      data-sort-year-start="{escape_attr(sort_year_start)}"
+      data-sort-year-end="{escape_attr(sort_year_end)}">
       <summary>
         <div class="entry-main" style="width:100%; min-width:0;">
           <div class="entry-heading-line" style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; min-width:0;">
@@ -2638,7 +3429,9 @@ def main():
         .replace("@@HEADER@@", build_header_html())
         .replace("@@ENTRIES@@", entries_html)
         .replace("@@SEARCH_TOOL_INSTRS@@", search_tool_js)
-        .replace("@@COMPOSERS@@", composers_js),
+        .replace("@@COMPOSERS@@", composers_js)
+        .replace("@@BIBLIO_OPTIONS@@", bibliography_options_js)
+        .replace("@@LIBRARY_OPTIONS@@", library_options_js),
         encoding="utf-8"
     )
 
@@ -2847,6 +3640,8 @@ def main():
     print("Pieces:", len(list(OUT_DIR.glob("piece-*.html"))))
     print("SearchTool instruments:", len(all_instr_sorted))
     print("Composers indexed:", len(composer_set))
+    print("Bibliography references indexed:", len(bibliography_options))
+    print("Holdings / Libraries sigla indexed:", len(library_options))
 
 if __name__ == "__main__":
     main()
