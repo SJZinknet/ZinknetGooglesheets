@@ -2172,15 +2172,21 @@ index_template = """<!doctype html>
     return selected.some(v => valSet.has(v));
   }
 
-  // ============ Sort controls
+   // ============ Sort controls
+
+  function compareDefault(a, b){
+    const aa = parseIntSafe(a.dataset.sortDefault);
+    const bb = parseIntSafe(b.dataset.sortDefault);
+    return (aa ?? Number.MAX_SAFE_INTEGER) - (bb ?? Number.MAX_SAFE_INTEGER);
+  }
 
   function compareText(a, b){
     return (a || '').localeCompare((b || ''), undefined, {sensitivity:'base'});
   }
 
   // Internal secondary sort only.
-  // This keeps ZINKNET number as a stable secondary order,
-  // without showing it as a visible Sort by option.
+  // ZINKNET number stays the stable secondary order,
+  // without appearing as a visible Sort by option.
   function compareZinknet(a, b){
     return compareDefault(a, b);
   }
@@ -2199,27 +2205,37 @@ index_template = """<!doctype html>
   function compareDateAsc(a, b){
     const ay = parseIntSafe(a.dataset.sortYearStart);
     const by = parseIntSafe(b.dataset.sortYearStart);
+
     const am = ay === null;
     const bm = by === null;
+
+    // Entries without date go last.
     if(am !== bm) return am ? 1 : -1;
+
     if(!am && ay !== by) return ay - by;
 
+    // Same date: composer, then ZINKNET number.
     return compareComposer(a, b);
   }
 
   function compareDateDesc(a, b){
     const ay = parseIntSafe(a.dataset.sortYearEnd);
     const by = parseIntSafe(b.dataset.sortYearEnd);
+
     const am = ay === null;
     const bm = by === null;
+
+    // Entries without date go last.
     if(am !== bm) return am ? 1 : -1;
+
     if(!am && ay !== by) return by - ay;
 
+    // Same date: composer, then ZINKNET number.
     return compareComposer(a, b);
   }
 
   function applySort(){
-    const mode = sortSelect.value;
+    const mode = sortBy.value;
     const ordered = [...cards];
 
     if(mode === 'dateAsc'){
@@ -2234,7 +2250,7 @@ index_template = """<!doctype html>
     ordered.forEach(card => entriesContainer.appendChild(card));
   }
 
-  sortSelect.addEventListener('change', () => {
+  sortBy.addEventListener('change', () => {
     applySort();
   });
 
