@@ -2067,10 +2067,9 @@ index_template = """<!doctype html>
         <div class="catalogue-sort">
           <label for="sortBy">Sort by</label>
           <select id="sortBy">
-            <option value="default">Default order</option>
-            <option value="composer">Composer A–Z</option>
-            <option value="date-asc">Source date: earliest first</option>
-            <option value="date-desc">Source date: latest first</option>
+  <option value="composer">Composer A–Z</option>
+  <option value="dateAsc">Source date ↑</option>
+  <option value="dateDesc">Source date ↓</option>
           </select>
         </div>
       </div>
@@ -2174,14 +2173,16 @@ index_template = """<!doctype html>
   }
 
   // ============ Sort controls
-  function compareDefault(a, b){
-    const aa = parseIntSafe(a.dataset.sortDefault);
-    const bb = parseIntSafe(b.dataset.sortDefault);
-    return (aa ?? Number.MAX_SAFE_INTEGER) - (bb ?? Number.MAX_SAFE_INTEGER);
-  }
 
   function compareText(a, b){
     return (a || '').localeCompare((b || ''), undefined, {sensitivity:'base'});
+  }
+
+  // Internal secondary sort only.
+  // This keeps ZINKNET number as a stable secondary order,
+  // without showing it as a visible Sort by option.
+  function compareZinknet(a, b){
+    return compareDefault(a, b);
   }
 
   function compareComposer(a, b){
@@ -2191,7 +2192,8 @@ index_template = """<!doctype html>
 
     const cmp = compareText(a.dataset.sortComposer || '', b.dataset.sortComposer || '');
     if(cmp !== 0) return cmp;
-    return compareDefault(a, b);
+
+    return compareZinknet(a, b);
   }
 
   function compareDateAsc(a, b){
@@ -2201,7 +2203,8 @@ index_template = """<!doctype html>
     const bm = by === null;
     if(am !== bm) return am ? 1 : -1;
     if(!am && ay !== by) return ay - by;
-    return compareDefault(a, b);
+
+    return compareComposer(a, b);
   }
 
   function compareDateDesc(a, b){
@@ -2211,27 +2214,27 @@ index_template = """<!doctype html>
     const bm = by === null;
     if(am !== bm) return am ? 1 : -1;
     if(!am && ay !== by) return by - ay;
-    return compareDefault(a, b);
+
+    return compareComposer(a, b);
   }
 
   function applySort(){
-    const mode = sortBy.value || 'default';
+    const mode = sortSelect.value;
     const ordered = [...cards];
 
-    if(mode === 'composer'){
-      ordered.sort(compareComposer);
-    } else if(mode === 'date-asc'){
+    if(mode === 'dateAsc'){
       ordered.sort(compareDateAsc);
-    } else if(mode === 'date-desc'){
+    } else if(mode === 'dateDesc'){
       ordered.sort(compareDateDesc);
     } else {
-      ordered.sort(compareDefault);
+      // Standard order: Composer A–Z, then ZINKNET number
+      ordered.sort(compareComposer);
     }
 
     ordered.forEach(card => entriesContainer.appendChild(card));
   }
 
-  sortBy.addEventListener('change', () => {
+  sortSelect.addEventListener('change', () => {
     applySort();
   });
 
