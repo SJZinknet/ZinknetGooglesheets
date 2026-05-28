@@ -2067,9 +2067,9 @@ index_template = """<!doctype html>
         <div class="catalogue-sort">
           <label for="sortBy">Sort by</label>
           <select id="sortBy">
-  <option value="composer">Composer A–Z</option>
-  <option value="dateAsc">Source date ↑</option>
-  <option value="dateDesc">Source date ↓</option>
+      <option value="composer">Composer A–Z</option>
+      <option value="dateAsc">Source date ↑</option>
+      <option value="dateDesc">Source date ↓</option>
           </select>
         </div>
       </div>
