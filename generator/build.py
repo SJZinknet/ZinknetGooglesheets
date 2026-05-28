@@ -919,13 +919,16 @@ h1{
 }
 
 details.filter-section{
+  position:relative;
+  z-index:1;
   border:1px solid rgba(208,213,235,0.95);
   background:linear-gradient(180deg,#fbfcff,#f6f7ff);
   border-radius:16px;
-  overflow:hidden;
+  overflow:visible;
 }
 
 details.filter-section[open]{
+  z-index:100;
   background:#ffffff;
   border-color:var(--border-strong);
   box-shadow:0 8px 22px rgba(15,23,42,0.07);
@@ -986,6 +989,11 @@ details.filter-section[open] .section-arrow{
   gap:10px;
 }
 
+.section-body{
+  position:relative;
+  overflow:visible;
+}
+
 /* Instrumentation simple-search dropdown */
 .instr-suggest-wrap{
   position:relative;
@@ -1005,7 +1013,7 @@ details.filter-section[open] .section-arrow{
   border:1px solid var(--border-subtle);
   border-radius:14px;
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
-  max-height:240px;
+  max-height:5000px;
   overflow:auto;
   z-index:80;
   padding:6px;
@@ -1068,7 +1076,7 @@ details.filter-section[open] .section-arrow{
 .wide-dropdown-menu{
   display:none;
   position:absolute;
-  z-index:80;
+  z-index:5000;
   top:calc(100% + 5px);
   left:0;
   width:min(760px, calc(100vw - 54px));
@@ -1156,7 +1164,7 @@ details.filter-section[open] .section-arrow{
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
   max-height:260px;
   overflow:auto;
-  z-index:80;
+  z-index:5000;
   padding:6px;
 }
 
@@ -1656,7 +1664,7 @@ dd.meta-value {
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
   max-height:240px;
   overflow:auto;
-  z-index:80;
+  z-index:5000;
   padding:6px;
 }
 
