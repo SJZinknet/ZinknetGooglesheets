@@ -862,6 +862,176 @@ h1{
   font-family: inherit;
 }
 
+
+/* Search panel — compact collapsible sections */
+.search-card-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.search-card-header h2{
+  margin:0;
+}
+
+.clear-top-btn{
+  flex:0 0 auto;
+  padding:5px 10px !important;
+  font-size:.74rem !important;
+  font-weight:650;
+  background:#fff !important;
+  border-color:#c5c8e6 !important;
+  color:#4b5563 !important;
+  white-space:nowrap;
+  margin-top:-1px;
+}
+
+.clear-top-btn:hover{
+  border-color:#9db5ff !important;
+  background:#fafaff !important;
+  color:var(--accent) !important;
+}
+
+.filter-field label{
+  display:block;
+  font-size:0.74rem;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  color:var(--muted);
+  margin-bottom:6px;
+  font-weight:650;
+}
+
+.field-hint{
+  margin-top:4px;
+  font-size:.76rem;
+  color:#6b7280;
+}
+
+.primary-search-block{
+  border:1px solid rgba(208,213,235,0.95);
+  background:linear-gradient(180deg,#ffffff,#fbfcff);
+  border-radius:16px;
+  padding:11px;
+  box-shadow:0 8px 22px rgba(15,23,42,0.045);
+}
+
+details.filter-section{
+  border:1px solid rgba(208,213,235,0.95);
+  background:linear-gradient(180deg,#fbfcff,#f6f7ff);
+  border-radius:16px;
+  overflow:hidden;
+}
+
+details.filter-section[open]{
+  background:#ffffff;
+  border-color:var(--border-strong);
+  box-shadow:0 8px 22px rgba(15,23,42,0.07);
+}
+
+details.filter-section > summary{
+  list-style:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:9px 11px;
+  user-select:none;
+}
+
+details.filter-section > summary::-webkit-details-marker{
+  display:none;
+}
+
+.section-title{
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+  min-width:0;
+}
+
+.section-title strong{
+  font-size:.76rem;
+  text-transform:uppercase;
+  letter-spacing:.13em;
+  color:#374151;
+  line-height:1.1;
+}
+
+.section-title span{
+  font-size:.76rem;
+  color:#6b7280;
+  line-height:1.2;
+}
+
+.section-arrow{
+  color:#6b7280;
+  transition:transform .16s ease;
+  font-size:1rem;
+}
+
+details.filter-section[open] .section-arrow{
+  transform:rotate(90deg);
+  color:var(--accent);
+}
+
+.section-body{
+  padding:11px;
+  border-top:1px solid rgba(208,213,235,0.72);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+/* Instrumentation simple-search dropdown */
+.instr-suggest-wrap{
+  position:relative;
+}
+
+.instr-menu{
+  display:none;
+  position:relative;
+}
+
+.instr-menu .instr-list{
+  position:absolute;
+  top:4px;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid var(--border-subtle);
+  border-radius:14px;
+  box-shadow:0 14px 30px rgba(15,23,42,0.10);
+  max-height:240px;
+  overflow:auto;
+  z-index:80;
+  padding:6px;
+}
+
+.instr-item{
+  padding:7px 10px;
+  border-radius:12px;
+  cursor:pointer;
+  font-size:0.9rem;
+  color:var(--text);
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.instr-item:hover{
+  background: rgba(35,75,184,0.06);
+}
+
+.instr-item-count{
+  color:#6b7280;
+  font-size:.8rem;
+  white-space:nowrap;
+}
+
 .filters-row { display:flex; flex-direction:column; gap:10px; }
 .filter-inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .filter-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
@@ -1661,136 +1831,223 @@ index_template = """<!doctype html>
 @@HEADER@@
 <main class="shell">
   <div class="layout">
-    <section class="card">
-      <h2>Search & filters</h2>
+    <section class="card search-card">
+      <div class="card-header search-card-header">
+        <h2>Search & filters</h2>
+        <button id="clearAllFilters" type="button" class="tag clear-top-btn">
+          Clear all filters
+        </button>
+      </div>
+
       <div class="filters">
         <div class="filters-row">
 
-          <div>
-            <label for="searchInput">Global search</label>
-            <input id="searchInput" type="text" placeholder="Composer, title, number, library, bibliography…" />
-          </div>
-
-          <div style="position:relative;">
-            <label for="composerInput">Composer (dropdown)</label>
-            <input id="composerInput" type="text" placeholder="Type: von, moritz, hessen…" autocomplete="off" />
-            <div class="composer-menu" id="composerMenu">
-              <div class="composer-list" id="composerList"></div>
+          <div class="primary-search-block">
+            <div class="filter-field">
+              <label for="searchInput">Search all</label>
+              <input id="searchInput" type="text" placeholder="Composer, title, number, library, bibliography…" />
+              <div class="field-hint">Broad search across the whole catalogue.</div>
             </div>
           </div>
 
-          <div>
-            <label for="instrInput">Search in instrumentations</label>
-            <input id="instrInput" type="text" placeholder="e.g. cnto, cornettino, trb…" />
-          </div>
+          <details class="filter-section">
+            <summary>
+              <div class="section-title">
+                <strong>Main filters</strong>
+                <span>Composer, music type, source category</span>
+              </div>
+              <div class="section-arrow">›</div>
+            </summary>
 
-          <div>
-            <label>RISM chronology</label>
-            <div class="filter-grid-2">
-              <input id="yearFrom" type="number" inputmode="numeric" placeholder="From (e.g. 1650)" />
-              <input id="yearTo" type="number" inputmode="numeric" placeholder="To (e.g. 1750)" />
-            </div>
-          </div>
+            <div class="section-body">
+              <div class="filter-field" style="position:relative;">
+                <label for="composerInput">Composer</label>
+                <input id="composerInput" type="text" placeholder="Type: von, moritz, hessen…" autocomplete="off" />
+                <div class="composer-menu" id="composerMenu">
+                  <div class="composer-list" id="composerList"></div>
+                </div>
+              </div>
 
-          <div>
-            <label>Instrumentation Search Builder</label>
-            <div class="filter-inline" style="gap:6px;">
-              <select id="stMode">
-                <option value="include">Include</option>
-                <option value="exclude">Exclude</option>
-              </select>
+              <div class="filter-field">
+                <label>Music type</label>
+                <div class="filter-inline">
+                  <select id="musicFilter"><option value="">All music types</option></select>
+                </div>
+              </div>
 
-              <select id="stCmp">
-                <option value="ge">≥</option>
-                <option value="eq">=</option>
-              </select>
+              <div class="filter-field">
+                <label>Source category</label>
+                <div class="filter-inline">
+                  <select id="sourceFilter"><option value="">All source categories</option></select>
+                </div>
+              </div>
 
-              <select id="stInstr">
-                <option value="">Select instrument…</option>
-              </select>
-
-              <select id="stQty">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-              </select>
-
-              <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
-              <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
-            </div>
-            <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
-          </div>
-
-          <div>
-            <label>Music type</label>
-            <div class="filter-inline">
-              <select id="musicFilter"><option value="">All music types</option></select>
-            </div>
-          </div>
-
-          <div>
-            <label>Source category</label>
-            <div class="filter-inline">
-              <select id="sourceFilter"><option value="">All source categories</option></select>
-            </div>
-          </div>
-
-          <div id="msDetailBlock" style="display:none;">
-            <label>Manuscript detail</label>
-            <div class="filter-inline">
-              <select id="msDetailFilter"><option value="">All manuscript details</option></select>
-            </div>
-          </div>
-
-          <div>
-            <label>Bibliography</label>
-            <div class="filter-inline filter-mode-row">
-              <select id="bibMatchMode" aria-label="Bibliography matching mode">
-                <option value="any">Match any</option>
-                <option value="all">Match all</option>
-              </select>
-            </div>
-            <div class="filter-dropdown-wrap">
-              <button id="bibToggle" type="button" class="wide-dropdown-toggle">All bibliographic references</button>
-              <div id="bibMenu" class="wide-dropdown-menu">
-                <div id="bibList"></div>
+              <div class="filter-field" id="msDetailBlock" style="display:none;">
+                <label>Manuscript detail</label>
+                <div class="filter-inline">
+                  <select id="msDetailFilter"><option value="">All manuscript details</option></select>
+                </div>
               </div>
             </div>
-            <div id="bibActive" class="active-filter-chips"></div>
-          </div>
+          </details>
 
-          <div style="position:relative;">
-            <label for="libraryInput">Holdings / Libraries</label>
-            <div class="filter-inline filter-mode-row">
-              <select id="libraryMatchMode" aria-label="Holdings or libraries matching mode">
-                <option value="any">Match any</option>
-                <option value="all">Match all</option>
-              </select>
+          <details class="filter-section">
+            <summary>
+              <div class="section-title">
+                <strong>Instrumentation</strong>
+                <span>Simple search and advanced count rules</span>
+              </div>
+              <div class="section-arrow">›</div>
+            </summary>
+
+            <div class="section-body">
+              <div class="filter-field instr-suggest-wrap">
+                <label for="instrInput">Simple search</label>
+                <input id="instrInput" type="text" placeholder="Type: cnto, trb, fag, bc…" autocomplete="off" />
+                <div class="instr-menu" id="instrMenu">
+                  <div class="instr-list" id="instrList"></div>
+                </div>
+                <div class="field-hint">Start typing, then select a suggestion or keep a free text search.</div>
+              </div>
+
+              <div class="filter-field">
+                <label>Advanced search</label>
+                <div class="filter-inline" style="gap:6px;">
+                  <select id="stMode">
+                    <option value="include">Include</option>
+                    <option value="exclude">Exclude</option>
+                  </select>
+
+                  <select id="stCmp">
+                    <option value="ge">≥</option>
+                    <option value="eq">=</option>
+                  </select>
+
+                  <select id="stInstr">
+                    <option value="">Select instrument…</option>
+                  </select>
+
+                  <select id="stQty">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                  </select>
+
+                  <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
+                  <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
+                </div>
+                <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+              </div>
             </div>
-            <input id="libraryInput" type="text" placeholder="Type a library siglum: GB-Lbl, A-Wn…" autocomplete="off" />
-            <div class="library-menu" id="libraryMenu">
-              <div class="library-list" id="libraryList"></div>
+          </details>
+
+          <details class="filter-section">
+            <summary>
+              <div class="section-title">
+                <strong>Date</strong>
+                <span>Filter by RISM/source date range</span>
+              </div>
+              <div class="section-arrow">›</div>
+            </summary>
+
+            <div class="section-body">
+              <div class="filter-field">
+                <label>Source date</label>
+                <div class="filter-grid-2">
+                  <input id="yearFrom" type="number" inputmode="numeric" placeholder="From (e.g. 1650)" />
+                  <input id="yearTo" type="number" inputmode="numeric" placeholder="To (e.g. 1750)" />
+                </div>
+              </div>
             </div>
-            <div id="libraryActive" class="active-filter-chips"></div>
-          </div>
+          </details>
 
-          <div>
-            <label for="rismNoInput">RISM number</label>
-            <input id="rismNoInput" type="text" inputmode="numeric" placeholder="e.g. 990000327" />
-          </div>
+          <details class="filter-section">
+            <summary>
+              <div class="section-title">
+                <strong>Bibliography</strong>
+                <span>Filter by catalogue reference</span>
+              </div>
+              <div class="section-arrow">›</div>
+            </summary>
 
-          <div>
-            <button id="clearAllFilters" type="button" class="tag" style="cursor:pointer; width:100%; padding:7px 11px;">
-              Clear all filters
-            </button>
-          </div>
+            <div class="section-body">
+              <div class="filter-field">
+                <label>Match mode</label>
+                <div class="filter-inline filter-mode-row">
+                  <select id="bibMatchMode" aria-label="Bibliography matching mode">
+                    <option value="any">Match any</option>
+                    <option value="all">Match all</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-field">
+                <label>References</label>
+                <div class="filter-dropdown-wrap">
+                  <button id="bibToggle" type="button" class="wide-dropdown-toggle">All bibliographic references</button>
+                  <div id="bibMenu" class="wide-dropdown-menu">
+                    <div id="bibList"></div>
+                  </div>
+                </div>
+                <div id="bibActive" class="active-filter-chips"></div>
+              </div>
+            </div>
+          </details>
+
+          <details class="filter-section">
+            <summary>
+              <div class="section-title">
+                <strong>Holdings / Libraries</strong>
+                <span>Filter by library sigla</span>
+              </div>
+              <div class="section-arrow">›</div>
+            </summary>
+
+            <div class="section-body">
+              <div class="filter-field">
+                <label>Match mode</label>
+                <div class="filter-inline filter-mode-row">
+                  <select id="libraryMatchMode" aria-label="Holdings or libraries matching mode">
+                    <option value="any">Match any</option>
+                    <option value="all">Match all</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-field" style="position:relative;">
+                <label for="libraryInput">Sigla</label>
+                <input id="libraryInput" type="text" placeholder="Type a library siglum: GB-Lbl, A-Wn…" autocomplete="off" />
+                <div class="library-menu" id="libraryMenu">
+                  <div class="library-list" id="libraryList"></div>
+                </div>
+                <div id="libraryActive" class="active-filter-chips"></div>
+              </div>
+            </div>
+          </details>
+
+          <details class="filter-section">
+            <summary>
+              <div class="section-title">
+                <strong>Identifiers</strong>
+                <span>Search exact catalogue identifiers</span>
+              </div>
+              <div class="section-arrow">›</div>
+            </summary>
+
+            <div class="section-body">
+              <div class="filter-field">
+                <label for="rismNoInput">RISM number</label>
+                <input id="rismNoInput" type="text" inputmode="numeric" placeholder="e.g. 990000327" />
+              </div>
+            </div>
+          </details>
 
         </div>
       </div>
@@ -1826,6 +2083,8 @@ index_template = """<!doctype html>
   const composerList = document.getElementById('composerList');
 
   const instrInput = document.getElementById('instrInput');
+  const instrMenu = document.getElementById('instrMenu');
+  const instrList = document.getElementById('instrList');
   const yearFrom = document.getElementById('yearFrom');
   const yearTo = document.getElementById('yearTo');
   const musicFilter = document.getElementById('musicFilter');
@@ -2825,6 +3084,9 @@ index_template = """<!doctype html>
   document.addEventListener('click', (ev) => {
     if(!composerMenu.contains(ev.target) && ev.target !== composerInput){
       closeComposerMenu();
+    }
+    if(instrMenu && !instrMenu.contains(ev.target) && ev.target !== instrInput){
+      closeInstrMenu();
     }
     if(!libraryMenu.contains(ev.target) && ev.target !== libraryInput){
       closeLibraryMenu();
