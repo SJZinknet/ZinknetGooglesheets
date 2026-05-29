@@ -17,6 +17,7 @@
 #     * Match any / Match all
 # - Smart collection filtering for Search Tool, chronology, composer, bibliography,
 #   holdings/libraries, and RISM number.
+# - RISM edition information for prints: Publisher / Printer + Publication Place.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -58,6 +59,8 @@ COL_RISM_HOLDINGS = "RISM Holdings"
 COL_RISM_DATE = "RISM Date"
 COL_RISM_EARLIEST = "RISM Earliest Year"
 COL_RISM_LATEST = "RISM Latest Year"
+COL_RISM_PUBLISHER_PRINTER = "RISM Publisher / Printer"
+COL_RISM_PUBLICATION_PLACE = "RISM Publication Place"
 
 EM_TITLES = [
     "The Early Trombone : a Catalog of Music",
@@ -1569,6 +1572,20 @@ dd.meta-value {
 
 .muted-value{ color:#9ca3af; }
 
+.index-source-note{
+  color:#6b7280;
+  font-size:.76rem;
+  line-height:1.25;
+}
+
+.index-source-identity{
+  font-size:.94rem;
+  font-weight:600;
+  color:var(--muted);
+  letter-spacing:.01em;
+  line-height:1.18;
+}
+
 .index-soft-ref{
   font-size:.70rem;
   color:#8a91a0;
@@ -2114,26 +2131,106 @@ def index_instrumentation_html(rec):
         bits.append(escape_with_italics(rec.get("instr_catalogs_raw", "")))
     return "<br>".join(bits)
 
+def parse_rism_publisher_printer_rows(raw):
+    """
+    Format RISM structured edition relations without normalizing them.
+
+    If every non-empty line has a clear "Role: value" structure, group
+    identical roles and use the RISM role as the site label. For example:
+      Publisher: A
+      Publisher: B
+    becomes one Publisher row with two lines.
+
+    If the cell is irregular, fall back to the general label
+    "Publisher / printer" and display the content as-is.
+    """
+    s = clean_str(raw)
+    if not s:
+        return []
+
+    lines = [ln.strip() for ln in re.split(r"\r?\n+", s) if ln.strip()]
+    if not lines:
+        return []
+
+    grouped = []
+    index = {}
+
+    for line in lines:
+        m = re.match(r"^([A-Za-z][A-Za-z /_-]*?)\s*:\s*(.+)$", line)
+        if not m:
+            return [("Publisher / printer", escape_textnode(s))]
+
+        role_raw = re.sub(r"\s+", " ", m.group(1).strip())
+        value = m.group(2).strip()
+        if not value:
+            return [("Publisher / printer", escape_textnode(s))]
+
+        role_key = role_raw.casefold()
+        role_map = {
+            "publisher": "Publisher",
+            "printer": "Printer",
+        }
+        label = role_map.get(role_key)
+        if not label:
+            return [("Publisher / printer", escape_textnode(s))]
+
+        if label not in index:
+            index[label] = []
+            grouped.append((label, index[label]))
+        index[label].append(value)
+
+    return [(label, "<br>".join(escape_textnode(v) for v in values)) for label, values in grouped]
+
+def first_print_record_with_edition_info(records_list, fallback):
+    for rr in records_list:
+        if not is_print_source_type(rr.get("source_type_raw", "")):
+            continue
+        if (clean_str(rr.get("rism_date_raw", ""))
+            or clean_str(rr.get("rism_publisher_printer_raw", ""))
+            or clean_str(rr.get("rism_publication_place_raw", ""))):
+            return rr
+    return fallback
+
+def source_grid_rows_html(rows):
+    if not rows:
+        return '<div class="index-source-note">No edition data available.</div>'
+    return (
+        '<div class="index-source-grid">'
+        + ''.join(
+            f'<div class="index-source-k">{escape_textnode(label)}</div><div class="index-source-v">{value_html}</div>'
+            for label, value_html in rows
+            if clean_str(label) and clean_str(value_html)
+        )
+        + '</div>'
+    )
+
 def build_index_source_panel(rec, group_recs=None):
     """
     Right column for open index cards.
-    PRINT: Publisher / Place / Year placeholders.
-    MANUSCRIPTS: Library / Shelfmark / Year.
+    PRINT: Date + RISM publisher/printer relations + place, only when non-empty.
+    MANUSCRIPT: Library / Shelfmark / Year.
     No RISM Online link here; RISM remains in the tag row and detail page.
     """
     group_recs = group_recs or [rec]
     family = source_family_for_records(group_recs)
 
     if family == "print":
-        year = escape_textnode(rec.get("rism_date_raw", "")) or "—"
+        print_rec = first_print_record_with_edition_info(group_recs, rec)
+        rows = []
+
+        if clean_str(print_rec.get("rism_date_raw", "")):
+            rows.append(("Date", escape_textnode(print_rec.get("rism_date_raw", ""))))
+
+        rows.extend(parse_rism_publisher_printer_rows(print_rec.get("rism_publisher_printer_raw", "")))
+
+        if clean_str(print_rec.get("rism_publication_place_raw", "")):
+            rows.append(("Place", escape_textnode(print_rec.get("rism_publication_place_raw", ""))))
+
+        rows_html = source_grid_rows_html(rows)
         return f"""
           <aside class="index-source-panel">
             <div class="index-panel-title">PRINT</div>
-            <div class="index-source-grid">
-              <div class="index-source-k">Publisher</div><div class="index-source-v muted-value">—</div>
-              <div class="index-source-k">Place</div><div class="index-source-v muted-value">—</div>
-              <div class="index-source-k">Year</div><div class="index-source-v">{year}</div>
-            </div>
+            {rows_html}
           </aside>"""
 
     if family == "manuscript":
@@ -2144,26 +2241,27 @@ def build_index_source_panel(rec, group_recs=None):
                 break
         ident_rec = ident_rec or rec
 
-        lib = escape_textnode(ident_rec.get("library_raw", ""))
-        shelf = escape_textnode(ident_rec.get("shelfmark_raw", ""))
-        year = escape_textnode(rec.get("rism_date_raw", "")) or "—"
+        rows = []
+        if clean_str(ident_rec.get("library_raw", "")):
+            rows.append(("Library", escape_textnode(ident_rec.get("library_raw", ""))))
+        if clean_str(ident_rec.get("shelfmark_raw", "")):
+            rows.append(("Shelfmark", f'<span class="source-shelfmark">{escape_textnode(ident_rec.get("shelfmark_raw", ""))}</span>'))
+        if clean_str(rec.get("rism_date_raw", "")):
+            rows.append(("Date", escape_textnode(rec.get("rism_date_raw", ""))))
 
+        rows_html = source_grid_rows_html(rows)
         return f"""
           <aside class="index-source-panel">
-            <div class="index-panel-title">MANUSCRIPTS</div>
-            <div class="index-source-grid">
-              <div class="index-source-k">Library</div><div class="index-source-v">{lib or "—"}</div>
-              <div class="index-source-k">Shelfmark</div><div class="index-source-v"><span class="source-shelfmark">{shelf or "—"}</span></div>
-              <div class="index-source-k">Year</div><div class="index-source-v">{year}</div>
-            </div>
+            <div class="index-panel-title">MANUSCRIPT</div>
+            {rows_html}
           </aside>"""
 
+    source_type = escape_textnode(rec.get("source_type_raw", ""))
+    rows_html = source_grid_rows_html([("Type", source_type)] if source_type else [])
     return f"""
           <aside class="index-source-panel">
             <div class="index-panel-title">SOURCE</div>
-            <div class="index-source-grid">
-              <div class="index-source-k">Type</div><div class="index-source-v">{escape_textnode(rec.get("source_type_raw", "")) or "—"}</div>
-            </div>
+            {rows_html}
           </aside>"""
 
 # =========================
@@ -2175,7 +2273,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=source-aware-2026-05-29">
+  <link rel="stylesheet" href="style.css?v=rism-edition-2026-05-29">
 </head>
 <body>
 @@HEADER@@
@@ -3478,7 +3576,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=source-aware-2026-05-29">
+  <link rel="stylesheet" href="style.css?v=rism-edition-2026-05-29">
 </head>
 <body>
 @@HEADER@@
@@ -3578,6 +3676,8 @@ def main():
             "rism_date_raw": clean_str(get_col(row, COL_RISM_DATE)) if (COL_RISM_DATE in df.columns) else "",
             "rism_earliest_year_raw": clean_numberish(get_col(row, COL_RISM_EARLIEST)) if (COL_RISM_EARLIEST in df.columns) else "",
             "rism_latest_year_raw": clean_numberish(get_col(row, COL_RISM_LATEST)) if (COL_RISM_LATEST in df.columns) else "",
+            "rism_publisher_printer_raw": clean_str(get_col(row, COL_RISM_PUBLISHER_PRINTER)) if (COL_RISM_PUBLISHER_PRINTER in df.columns) else "",
+            "rism_publication_place_raw": clean_str(get_col(row, COL_RISM_PUBLICATION_PLACE)) if (COL_RISM_PUBLICATION_PLACE in df.columns) else "",
         }
 
         lib_raw = get_col(row, COL_LIB)
@@ -3640,6 +3740,7 @@ def main():
                 "search_tool_raw": "", "search_scenarios": [],
                 "rism_holdings_raw": "", "rism_date_raw": "",
                 "rism_earliest_year_raw": "", "rism_latest_year_raw": "",
+                "rism_publisher_printer_raw": "", "rism_publication_place_raw": "",
                 "year_min": None, "year_max": None,
                 "bibliography_refs": [],
                 "holdings_library_sigla_raw": [],
@@ -3763,6 +3864,18 @@ def main():
         group_recs = [records[z] for z in ids if z in records]
         primary_label_raw = index_primary_label_raw(hrec, group_recs)
         composer_txt = escape_textnode(primary_label_raw) if primary_label_raw else ""
+        primary_is_source_identity = bool(
+            primary_label_raw
+            and not clean_str(hrec.get("composer_raw", ""))
+            and source_family_for_records(group_recs) == "manuscript"
+        )
+        primary_class = "index-source-identity" if primary_is_source_identity else "entry-composer-main"
+        primary_style = (
+            "font-size:.94rem; font-weight:600; color:var(--muted); "
+            "letter-spacing:.01em; line-height:1.18; min-width:0;"
+            if primary_is_source_identity else
+            "font-size:1.05rem; font-weight:750; color:#020617; line-height:1.15; min-width:0;"
+        )
         display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
 
         line_ids = [z for z in ids if not (coll_id and z == coll_id)]
@@ -3861,6 +3974,8 @@ def main():
                 rr["bibliography_raw"],
                 rr.get("rism_date_raw",""),
                 rr.get("rism_holdings_raw",""),
+                rr.get("rism_publisher_printer_raw",""),
+                rr.get("rism_publication_place_raw",""),
             ])
         search_blob = " ".join([p for p in search_blob_parts if p]).replace("\n", " ")
 
@@ -4038,7 +4153,7 @@ def main():
             <span class="entry-ref" style="font-size:0.72rem; color:#6b7280; font-weight:600; letter-spacing:.04em; line-height:1.1; flex:0 0 auto;">
               {escape_textnode(display_id)}
             </span>
-            <span class="entry-composer-main" style="font-size:1.05rem; font-weight:750; color:#020617; line-height:1.15; min-width:0;">
+            <span class="{primary_class}" style="{primary_style}">
               {composer_txt}
             </span>
           </div>
