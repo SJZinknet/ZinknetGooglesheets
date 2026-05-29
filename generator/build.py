@@ -3,7 +3,7 @@
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
 # Current index/search features:
-# - Sort by: Default order / Composer A–Z / Source date earliest first / Source date latest first
+# - Sort by: Composer A–Z / Source date earliest first / Source date latest first
 # - Specific RISM number filter, in addition to RISM No. being searchable globally
 # - Bibliography:
 #     * included in global search
@@ -1464,6 +1464,181 @@ dd.meta-value {
   color:var(--muted);
 }
 
+
+/* Source-aware open index cards */
+.index-card-grid{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(190px,235px);
+  gap:10px;
+  align-items:start;
+}
+
+@media (max-width: 720px){
+  .index-card-grid{ grid-template-columns:1fr; }
+}
+
+.index-work-panel,
+.index-contents-panel,
+.index-source-panel{
+  border:1px solid #d4d9ef;
+  background:#ffffff;
+  border-radius:15px;
+  padding:9px 11px;
+  min-width:0;
+}
+
+.index-work-panel,
+.index-contents-panel{
+  background:linear-gradient(180deg,#ffffff,#f8f9ff);
+}
+
+.index-panel-title{
+  font-size:.70rem;
+  text-transform:uppercase;
+  letter-spacing:.13em;
+  color:var(--muted);
+  font-weight:750;
+  margin-bottom:6px;
+}
+
+.index-work-title{
+  font-size:.92rem;
+  font-weight:720;
+  color:#111827;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+
+.index-work-meta{
+  margin-top:3px;
+  color:var(--muted);
+  font-size:.80rem;
+  line-height:1.30;
+}
+
+.index-instr-integrated{
+  margin-top:8px;
+  border-top:1px solid #e1e5f5;
+  padding-top:7px;
+}
+
+.index-instr-label{
+  display:block;
+  font-size:.68rem;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:#25345f;
+  font-weight:750;
+  margin-bottom:3px;
+}
+
+.index-instr-text{
+  color:#1f2937;
+  font-size:.86rem;
+  line-height:1.33;
+  overflow-wrap:anywhere;
+}
+
+.index-instr-alt-label{
+  display:inline-block;
+  margin-right:4px;
+  font-size:.68rem;
+  text-transform:uppercase;
+  letter-spacing:.10em;
+  color:#53618a;
+  font-weight:750;
+}
+
+.index-source-grid{
+  display:grid;
+  grid-template-columns:minmax(0,76px) minmax(0,1fr);
+  gap:4px 9px;
+}
+
+.index-source-k{
+  color:var(--muted);
+  font-size:.76rem;
+  font-weight:650;
+}
+
+.index-source-v{
+  color:#1f2937;
+  font-size:.84rem;
+  overflow-wrap:anywhere;
+}
+
+.muted-value{ color:#9ca3af; }
+
+.index-soft-ref{
+  font-size:.70rem;
+  color:#8a91a0;
+  font-weight:600;
+  letter-spacing:.035em;
+  line-height:1.1;
+}
+
+.index-content-row.subpiece-line{
+  display:grid;
+  grid-template-columns:minmax(48px,58px) minmax(0,1fr);
+  gap:8px;
+  border-top:1px solid #e1e5f5;
+  padding:7px 0;
+  font-size:.88rem;
+  background:transparent;
+}
+
+.index-content-row.subpiece-line:first-of-type{
+  border-top:none;
+  padding-top:0;
+}
+
+.index-content-row.subpiece-line.is-match{
+  border-top:1px solid rgba(139,92,246,0.35);
+  background:rgba(139,92,246,0.07);
+  border-radius:10px;
+  padding-left:8px;
+  padding-right:8px;
+}
+
+.index-piece-ref{
+  font-size:.66rem;
+  color:#8a91a0;
+  font-weight:600;
+  letter-spacing:.035em;
+  line-height:1.1;
+  padding-top:2px;
+}
+
+.index-content-title{
+  font-size:.86rem;
+  font-weight:650;
+  color:#111827;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+
+.index-content-meta{
+  font-size:.78rem;
+  color:var(--muted);
+  margin-top:1px;
+  line-height:1.28;
+}
+
+.index-content-instr{
+  font-size:.78rem;
+  color:#1f2937;
+  margin-top:3px;
+  line-height:1.28;
+  overflow-wrap:anywhere;
+}
+
+.index-content-extra{
+  margin-top:4px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+}
+
 /* Detail pages */
 .detail-shell {
   max-width:900px;
@@ -1823,6 +1998,165 @@ def piece_value_payload(records, piece_ids, value_getter, header_rec=None):
         values = value_getter(rr)
         payload.append({"pid": pid, "values": values})
     return payload
+
+def abbreviate_title(raw, max_len=90):
+    """
+    Short display title for index-open WORK / CONTENTS blocks.
+    The full diplomatic title stays available in the page detail and in the HTML title attribute.
+    """
+    s = clean_str(raw)
+    if not s:
+        return ""
+    if len(s) <= max_len:
+        return s
+
+    separators = [" | ", ". ", "; ", ": ", " – ", " — ", " - "]
+    candidates = []
+    for sep in separators:
+        idx = s.find(sep)
+        if 35 <= idx <= max_len:
+            candidates.append(idx)
+
+    if candidates:
+        cut = min(candidates)
+        return s[:cut].rstrip(" .;:|–—-") + "…"
+
+    cut = s.rfind(" ", 0, max_len)
+    if cut < 45:
+        cut = max_len
+    return s[:cut].rstrip(" .;:|–—-,") + "…"
+
+def abbreviated_title_html(raw, max_len=90):
+    raw_s = clean_str(raw)
+    short = abbreviate_title(raw_s, max_len=max_len)
+    if not short:
+        return ""
+    title_attr = f' title="{escape_attr(raw_s)}"' if raw_s and short != raw_s else ""
+    return f'<span{title_attr}>{escape_textnode(short)}</span>'
+
+def is_manuscript_source_type(raw):
+    return "Manuscript" in source_categories_for_filter(raw)
+
+def is_print_source_type(raw):
+    return "Print" in source_categories_for_filter(raw)
+
+def source_family_for_records(records_list):
+    """
+    Source family for the index-open right column.
+    Manuscript wins over Print because manuscript identity is more source-specific.
+    """
+    has_ms = any(is_manuscript_source_type(r.get("source_type_raw", "")) for r in records_list)
+    if has_ms:
+        return "manuscript"
+    has_print = any(is_print_source_type(r.get("source_type_raw", "")) for r in records_list)
+    if has_print:
+        return "print"
+    return "other"
+
+def manuscript_identity_raw(rec):
+    lib = clean_str(rec.get("library_raw", ""))
+    shelf = clean_str(rec.get("shelfmark_raw", ""))
+    return " ".join([x for x in [lib, shelf] if x]).strip()
+
+def first_manuscript_identity_raw(records_list):
+    for rec in records_list:
+        if is_manuscript_source_type(rec.get("source_type_raw", "")):
+            ident = manuscript_identity_raw(rec)
+            if ident:
+                return ident
+    for rec in records_list:
+        ident = manuscript_identity_raw(rec)
+        if ident:
+            return ident
+    return ""
+
+def index_primary_label_raw(rec, group_recs=None):
+    """
+    Main bold identity in the index.
+    - Composer when present.
+    - For manuscripts without composer: Library + Shelfmark.
+    - Otherwise blank, so the title line remains the main identifier.
+    """
+    comp = clean_str(rec.get("composer_raw", ""))
+    if comp:
+        return comp
+
+    group_recs = group_recs or [rec]
+    if source_family_for_records(group_recs) == "manuscript":
+        ident = first_manuscript_identity_raw(group_recs)
+        if ident:
+            return ident
+
+    return ""
+
+def index_instrumentation_html(rec):
+    """
+    Compact instrumentation block for the open index card.
+    It keeps the information close to WORK / CONTENTS instead of showing it as a detached old-style pill.
+    """
+    bits = []
+    if clean_str(rec.get("instr_rism_main_raw", "")):
+        bits.append(escape_textnode(rec.get("instr_rism_main_raw", "")))
+    if clean_str(rec.get("instr_rism_alt_raw", "")):
+        bits.append(
+            '<span class="index-instr-alt-label">Alternative</span> '
+            + escape_textnode(rec.get("instr_rism_alt_raw", ""))
+        )
+    if not bits and clean_str(rec.get("instr_catalogs_raw", "")):
+        bits.append(escape_with_italics(rec.get("instr_catalogs_raw", "")))
+    return "<br>".join(bits)
+
+def build_index_source_panel(rec, group_recs=None):
+    """
+    Right column for open index cards.
+    PRINT: Publisher / Place / Year placeholders.
+    MANUSCRIPTS: Library / Shelfmark / Year.
+    No RISM Online link here; RISM remains in the tag row and detail page.
+    """
+    group_recs = group_recs or [rec]
+    family = source_family_for_records(group_recs)
+
+    if family == "print":
+        year = escape_textnode(rec.get("rism_date_raw", "")) or "—"
+        return f"""
+          <aside class="index-source-panel">
+            <div class="index-panel-title">PRINT</div>
+            <div class="index-source-grid">
+              <div class="index-source-k">Publisher</div><div class="index-source-v muted-value">—</div>
+              <div class="index-source-k">Place</div><div class="index-source-v muted-value">—</div>
+              <div class="index-source-k">Year</div><div class="index-source-v">{year}</div>
+            </div>
+          </aside>"""
+
+    if family == "manuscript":
+        ident_rec = None
+        for rr in group_recs:
+            if is_manuscript_source_type(rr.get("source_type_raw", "")) and manuscript_identity_raw(rr):
+                ident_rec = rr
+                break
+        ident_rec = ident_rec or rec
+
+        lib = escape_textnode(ident_rec.get("library_raw", ""))
+        shelf = escape_textnode(ident_rec.get("shelfmark_raw", ""))
+        year = escape_textnode(rec.get("rism_date_raw", "")) or "—"
+
+        return f"""
+          <aside class="index-source-panel">
+            <div class="index-panel-title">MANUSCRIPTS</div>
+            <div class="index-source-grid">
+              <div class="index-source-k">Library</div><div class="index-source-v">{lib or "—"}</div>
+              <div class="index-source-k">Shelfmark</div><div class="index-source-v"><span class="index-soft-ref">{shelf or "—"}</span></div>
+              <div class="index-source-k">Year</div><div class="index-source-v">{year}</div>
+            </div>
+          </aside>"""
+
+    return f"""
+          <aside class="index-source-panel">
+            <div class="index-panel-title">SOURCE</div>
+            <div class="index-source-grid">
+              <div class="index-source-k">Type</div><div class="index-source-v">{escape_textnode(rec.get("source_type_raw", "")) or "—"}</div>
+            </div>
+          </aside>"""
 
 # =========================
 # HTML templates
@@ -3418,68 +3752,76 @@ def main():
                 f'multiple</span>'
             )
 
-        composer_txt = hrec.get("composer", "") or ""
+        group_recs = [records[z] for z in ids if z in records]
+        primary_label_raw = index_primary_label_raw(hrec, group_recs)
+        composer_txt = escape_textnode(primary_label_raw) if primary_label_raw else ""
         display_id = header_id.split("/", 1)[0] if (coll_id and "/" in header_id) else header_id
 
-        instr_block = build_instr_block_for_record(hrec, include_catalogs=not (coll_id or is_virtual_collection))
+        line_ids = [z for z in ids if not (coll_id and z == coll_id)]
 
-        meta_rows = []
-        if (not is_virtual_collection) and hrec["composer"]:
-            meta_rows.append(f'<dt class="meta-label">Composer</dt><dd class="meta-value">{hrec["composer"]}</dd>')
+        source_panel_html = build_index_source_panel(hrec, group_recs)
 
-        lib_val = hrec["library"]
-        shelf_val = hrec["shelfmark"]
-        if hrec["see_rism"]:
-            if lib_val: lib_val += " "
-            lib_val += '<span class="see-rism-tag">See RISM</span>'
-            if shelf_val: shelf_val += " "
-            shelf_val += '<span class="see-rism-tag">See RISM</span>'
-
-        if lib_val:
-            meta_rows.append(f'<dt class="meta-label">Library</dt><dd class="meta-value">{lib_val}</dd>')
-        if shelf_val:
-            meta_rows.append(f'<dt class="meta-label">Shelfmark</dt><dd class="meta-value">{shelf_val}</dd>')
-
-        meta_html = ('<dl class="meta">' + "\n".join(meta_rows) + "</dl>") if meta_rows else ""
-
-        sub_block = ""
         if coll_id or is_virtual_collection:
             sub_lines = []
-            for pid in ids:
-                if coll_id and pid == coll_id:
-                    continue
+            for pid in line_ids:
                 r = records[pid]
 
                 conc_tag = ""
                 if r["concordances_ids"]:
                     n = len(r["concordances_ids"])
-                    conc_tag = f'<div class="subpiece-conc-tag"><span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span></div>'
+                    conc_tag = f'<span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span>'
 
-                instr_short = r["instr_rism_main_raw"] or r["instr_catalogs_raw"]
-                instr_short_disp = escape_textnode(instr_short) if instr_short else ""
+                content_title = abbreviated_title_html(r["title_raw"] or "(Untitled)", max_len=92)
+                content_composer = r["composer"] or "Anonymous"
+                content_instr = index_instrumentation_html(r)
 
-                used_links_line = set()
-                sub_rism = rism_chip_self(r, used_links_line)
+                extras = []
+                if conc_tag:
+                    extras.append(conc_tag)
 
                 sub_lines.append(f"""
-      <div class="subpiece-line" data-pid="{escape_attr(pid)}" data-composer-raw="{escape_attr(r.get('composer_raw',''))}">
-        <div><span class="subpiece-id">{escape_textnode(pid)} — {r['title'] or '(Untitled)'}</span></div>
-        <div class="subpiece-meta">{r['composer'] or ''}</div>
-        <div class="subpiece-meta">{instr_short_disp}</div>
-        <div class="subpiece-meta subpiece-link">
-          <a href="piece-{pid.replace('/','-')}.html" target="_blank" rel="noopener">Open piece page</a>
-          {sub_rism}
-        </div>
-        {conc_tag}
-      </div>""")
-            if sub_lines:
-                sub_block = f"""
-      <div class="subpieces">
-        <div class="subpieces-title">Contents <span class="subpieces-matchcount"></span></div>
-        {''.join(sub_lines)}
-      </div>"""
+              <div class="index-content-row subpiece-line" data-pid="{escape_attr(pid)}" data-composer-raw="{escape_attr(r.get('composer_raw',''))}">
+                <div><span class="index-piece-ref">{escape_textnode(pid)}</span></div>
+                <div>
+                  <div class="index-content-title">{content_title}</div>
+                  <div class="index-content-meta">{content_composer}</div>
+                  <div class="index-content-instr">{content_instr}</div>
+                  {('<div class="index-content-extra">' + ''.join(extras) + '</div>') if extras else ''}
+                </div>
+              </div>""")
 
-        title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
+            left_panel_html = f"""
+          <div class="index-contents-panel">
+            <div class="index-panel-title">CONTENTS <span class="subpieces-matchcount"></span></div>
+            {''.join(sub_lines)}
+          </div>"""
+        else:
+            work_title = abbreviated_title_html(hrec["title_raw"] or "(Untitled)", max_len=92)
+            work_meta = hrec["composer"] or ""
+            work_instr = index_instrumentation_html(hrec)
+
+            left_panel_html = f"""
+          <div class="index-work-panel">
+            <div class="index-panel-title">WORK</div>
+            <div class="index-work-title">{work_title}</div>
+            {f'<div class="index-work-meta">{work_meta}</div>' if work_meta else ''}
+            <div class="index-instr-integrated">
+              <span class="index-instr-label">Instrumentation</span>
+              <div class="index-instr-text">{work_instr or '<span class="muted-value">—</span>'}</div>
+            </div>
+          </div>"""
+
+        body_panel_html = f"""
+        <div class="index-card-grid">
+          {left_panel_html}
+          {source_panel_html}
+        </div>"""
+
+        title_raw_header = hrec["title_raw"]
+        if primary_label_raw and clean_str(title_raw_header).casefold() == clean_str(primary_label_raw).casefold():
+            title_html = ""
+        else:
+            title_html = hrec["title"] if hrec["title"] else ("" if is_virtual_collection else "<em>(Untitled)</em>")
 
         if title_html:
             title_line_html = f"""
@@ -3657,7 +3999,8 @@ def main():
         sort_year_start = h_year_min if h_year_min is not None else (min(group_year_mins) if group_year_mins else "")
         sort_year_end = h_year_max if h_year_max is not None else (max(group_year_maxs) if group_year_maxs else "")
 
-        open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">Open detailed page</a></div>'
+        open_link_label = "Open collection page" if (coll_id or is_virtual_collection) else "Open single-work page"
+        open_link_html = f'<div class="entry-open-link"><a href="piece-{header_id.replace("/","-")}.html" target="_blank" rel="noopener">{open_link_label}</a></div>'
 
         group_html_parts.append(f"""
     <details class="entry"
@@ -3703,9 +4046,7 @@ def main():
         <div class="entry-arrow">›</div>
       </summary>
       <div class="entry-body">
-        {instr_block}
-        {meta_html}
-        {sub_block}
+        {body_panel_html}
         {open_link_html}
       </div>
     </details>
