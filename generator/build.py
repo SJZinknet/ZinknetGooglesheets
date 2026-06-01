@@ -1974,6 +1974,7 @@ details.rism > summary::-webkit-details-marker{display:none}
 .detail-lower-left-v10{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;align-items:start;}
 .detail-lower-left-v10 > .full-span{grid-column:1 / -1;}
 .detail-panel-v10,.detail-doc-v10{border:1px solid #d4d9ef;background:#fff;border-radius:18px;padding:12px 14px;min-width:0;}
+.detail-main-panel-v10{background:linear-gradient(180deg,#ffffff,#f8f9ff);}
 .detail-doc-v10{overflow:hidden;padding:0;}
 .detail-panel-title-v10{font-size:.72rem;text-transform:uppercase;letter-spacing:.13em;color:var(--muted);font-weight:780;margin-bottom:10px;}
 .detail-identity-v10{margin:0 0 8px;}.detail-identity-label-v10{font-size:.70rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:760;margin-bottom:3px;}
@@ -2329,7 +2330,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=rism-edition-2026-05-29">
+  <link rel="stylesheet" href="style.css?v=detail-v12-main-tint-2026-06-01">
 </head>
 <body>
 @@HEADER@@
@@ -3841,7 +3842,7 @@ def detail_work_or_collection_panel_html(rec, ids_in_group, coll_id, is_virtual_
     instr = detail_instr_html(rec)
     content = detail_content_html(ids_in_group, coll_id, records) if is_collection else ""
     return f'''
-        <section class="detail-panel-v10">
+        <section class="detail-panel-v10 detail-main-panel-v10">
           <div class="detail-panel-title-v10">{panel_title}</div>
           {identity_html}
           <div class="detail-title-full-v10">{title}</div>
@@ -3855,7 +3856,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v11-2026-06-01">
+  <link rel="stylesheet" href="style.css?v=detail-v12-main-tint-2026-06-01">
 </head>
 <body>
 @@HEADER@@
