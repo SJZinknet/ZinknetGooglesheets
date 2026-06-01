@@ -3734,8 +3734,13 @@ def detail_organology_html(rec):
         return ""
     return detail_doc_section_html("Organology", rec.get("organology", ""), full_span=False)
 
+def detail_is_collection_record(rec):
+    return rec.get("indiv_coll") in ("Coll.", "VirtualColl") or clean_str(rec.get("id", "")).endswith("/0")
+
 def detail_instr_html(rec):
-    if rec.get("indiv_coll") == "VirtualColl":
+    # Collection pages should go directly from COLLECTION/title to Content.
+    # Do not fill the main Instrumentation block from Instrumentation from Catalogs.
+    if detail_is_collection_record(rec):
         return ""
     bits = []
     if clean_str(rec.get("instr_rism_main_raw", "")):
@@ -3810,7 +3815,7 @@ def detail_concordances_html(rec, records, used_links_page):
         </details>'''
 
 def detail_work_or_collection_panel_html(rec, ids_in_group, coll_id, is_virtual_group, records):
-    is_collection = rec.get("indiv_coll") in ("Coll.", "VirtualColl")
+    is_collection = detail_is_collection_record(rec)
     panel_title = "COLLECTION" if is_collection else "WORK"
     identity_html = ""
     if clean_str(rec.get("composer_raw", "")):
@@ -3850,7 +3855,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v10-2026-06-01">
+  <link rel="stylesheet" href="style.css?v=detail-v11-2026-06-01">
 </head>
 <body>
 @@HEADER@@
@@ -3867,14 +3872,14 @@ detail_template = """<!doctype html>
         @@MAIN_PANEL@@
         <div class="detail-lower-left-v10">
           @@CATALOGUE_BIBLIOGRAPHY@@
-          @@NOTE@@
-          @@ORG@@
           @@CONC@@
         </div>
       </div>
       <div class="detail-right-stack-v10">
         @@SOURCE_PANEL@@
         @@RISM_RECORD@@
+        @@ORG@@
+        @@NOTE@@
       </div>
     </div>
   </article>
