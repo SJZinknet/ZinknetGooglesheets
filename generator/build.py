@@ -1962,6 +1962,62 @@ details.rism > summary::-webkit-details-marker{display:none}
   max-height: 260px;
   overflow:auto;
 }
+/* =========================
+   Detail pages — v10 architecture
+   ========================= */
+.detail-shell-v10{max-width:1260px;margin:0 auto;padding:18px 22px 34px;}
+.detail-page-v10{background:rgba(255,255,255,.78);border:1px solid var(--border-subtle);border-radius:24px;padding:15px;box-shadow:0 18px 44px rgba(15,23,42,.09);}
+.detail-topline-v10{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:4px 4px 12px;border-bottom:1px solid #dbe0f2;margin-bottom:12px;}
+.detail-ref-v10{color:#111827;font-size:.95rem;font-weight:650;letter-spacing:.02em;}
+.detail-columns-v10{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,310px);gap:12px;align-items:start;}
+.detail-left-stack-v10,.detail-right-stack-v10{display:flex;flex-direction:column;gap:10px;min-width:0;align-self:start;}
+.detail-lower-left-v10{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;align-items:start;}
+.detail-lower-left-v10 > .full-span{grid-column:1 / -1;}
+.detail-panel-v10,.detail-doc-v10{border:1px solid #d4d9ef;background:#fff;border-radius:18px;padding:12px 14px;min-width:0;}
+.detail-doc-v10{overflow:hidden;padding:0;}
+.detail-panel-title-v10{font-size:.72rem;text-transform:uppercase;letter-spacing:.13em;color:var(--muted);font-weight:780;margin-bottom:10px;}
+.detail-identity-v10{margin:0 0 8px;}.detail-identity-label-v10{font-size:.70rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:760;margin-bottom:3px;}
+.detail-identity-value-v10{font-size:1.12rem;font-weight:800;color:#020617;line-height:1.18;}
+.detail-identity-value-v10.source-identity{font-size:.96rem;font-weight:560;color:#4b5563;}
+.detail-soft-rule-v10{height:1px;background:#e1e5f5;margin:10px 0;}
+.detail-title-full-v10{font-size:1rem;font-weight:500;color:#1f2937;line-height:1.32;overflow-wrap:anywhere;}
+.detail-instr-v10{margin-top:10px;border-top:1px solid #e1e5f5;padding-top:9px;color:#1f2937;font-size:.91rem;line-height:1.38;overflow-wrap:anywhere;}
+.detail-instr-label-v10,.detail-content-title-label-v10{display:block;font-size:.70rem;text-transform:uppercase;letter-spacing:.12em;color:#25345f;font-weight:760;margin-bottom:4px;}
+.detail-source-grid-v10,.detail-rism-record-grid-v10{display:grid;grid-template-columns:minmax(0,82px) minmax(0,1fr);gap:6px 10px;align-items:start;}
+.detail-source-k-v10,.detail-rism-record-grid-v10 .k{font-size:.77rem;color:var(--muted);font-weight:680;}
+.detail-source-v-v10,.detail-rism-record-grid-v10 .v{font-size:.86rem;color:#1f2937;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-family:inherit;}
+.detail-rism-label-v10{display:inline-flex;align-items:center;border-radius:999px;padding:1px 5px 0;font-size:.55rem;line-height:1.25;letter-spacing:.11em;text-transform:uppercase;font-weight:800;opacity:.68;white-space:nowrap;color:var(--violet-text);background:var(--violet-bg);border:1px solid var(--violet-border);}
+.detail-holdings-v10{margin-top:10px;border-top:1px solid #e1e5f5;padding-top:8px;}
+.detail-holdings-v10 summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;font-size:.84rem;color:#374151;font-weight:650;}
+.detail-holdings-v10 summary::-webkit-details-marker{display:none;}
+.detail-arrow-v10{display:inline-flex;width:16px;height:16px;align-items:center;justify-content:center;border-radius:999px;border:1px solid #cfd5ed;color:var(--muted);transition:transform .15s ease;font-size:.95rem;line-height:1;flex:0 0 auto;}
+.detail-holdings-v10[open] .detail-arrow-v10,.detail-doc-v10[open] > summary .detail-arrow-v10{transform:rotate(90deg);}
+.detail-holdings-list-v10{margin:7px 0 0;padding-left:17px;max-height:180px;overflow:auto;font-size:.80rem;color:#374151;line-height:1.32;}
+.detail-doc-v10 summary{list-style:none;padding:9px 12px;color:#374151;font-weight:700;font-size:.86rem;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:default;}
+.detail-doc-v10 summary::-webkit-details-marker{display:none;}
+.detail-doc-body-v10{border-top:1px solid #e1e5f5;padding:10px 12px;font-size:.86rem;color:#1f2937;line-height:1.36;overflow-wrap:anywhere;}
+.detail-doc-subtitle-v10{font-size:.70rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:760;margin:0 0 4px;}
+.detail-doc-subtitle-v10:not(:first-child){margin-top:10px;}
+.detail-content-section-v10{margin-top:10px;border-top:1px solid #e1e5f5;padding-top:9px;}
+.detail-content-list-v10{display:flex;flex-direction:column;gap:7px;}
+.detail-content-card-v10{display:grid;grid-template-columns:minmax(58px,72px) minmax(0,1fr) minmax(155px,220px);gap:4px 12px;border:1px solid #e1e5f5;background:#fff;border-radius:14px;padding:8px 10px;align-items:center;}
+.detail-content-ref-v10{grid-row:1 / span 3;color:#8a91a0;font-size:.68rem;font-weight:650;letter-spacing:.035em;align-self:start;padding-top:2px;}
+.detail-content-title-v10{grid-column:2;font-size:.90rem;font-weight:760;line-height:1.25;color:#111827;overflow-wrap:anywhere;}
+.detail-content-composer-v10{grid-column:3;grid-row:1;color:#4b5563;font-size:.80rem;text-align:right;align-self:center;line-height:1.25;}
+.detail-content-instr-v10{grid-column:2 / 4;font-size:.80rem;color:#4b5563;line-height:1.32;margin-top:0;overflow-wrap:anywhere;}
+.detail-content-link-v10{grid-column:2 / 4;margin-top:1px;font-size:.78rem;color:var(--accent);font-weight:650;}
+.detail-conc-block-v10 .conc-heading{padding:9px 12px;margin:0;color:#374151;font-weight:700;font-size:.86rem;text-transform:none;letter-spacing:0;}
+.detail-conc-block-v10 .conc-cards{border-top:1px solid #e1e5f5;padding:10px 12px;}
+.detail-conc-block-v10 .conc-card{box-shadow:none;}
+.index-content-row.subpiece-line{display:grid;grid-template-columns:minmax(48px,58px) minmax(0,1fr) minmax(130px,200px);gap:4px 10px;align-items:center;}
+.index-content-row .index-piece-ref{grid-row:1 / span 3;}
+.index-content-title{grid-column:2;font-weight:760;}
+.index-content-composer{grid-column:3;grid-row:1;color:var(--muted);font-size:.78rem;text-align:right;line-height:1.25;}
+.index-content-instr{grid-column:2 / 4;}.index-content-extra{grid-column:2 / 4;}
+@media (max-width:760px){.index-content-row.subpiece-line,.detail-content-card-v10{grid-template-columns:minmax(48px,58px) minmax(0,1fr);}.index-content-composer,.detail-content-composer-v10{grid-column:2;grid-row:auto;text-align:left;}.index-content-instr,.index-content-extra,.detail-content-instr-v10,.detail-content-link-v10{grid-column:2;}}
+@media (min-width:901px){.detail-doc-v10 summary .detail-arrow-v10{display:none;}}
+@media (max-width:900px){.detail-columns-v10{grid-template-columns:1fr;}.detail-topline-v10{flex-direction:column;}.detail-tags{justify-content:flex-start;}.detail-doc-v10 summary{cursor:pointer;}}
+
 """
 
 # =========================
@@ -3570,36 +3626,257 @@ index_template = """<!doctype html>
 </html>
 """
 
+
+def detail_rism_label():
+    return '<span class="detail-rism-label-v10">RISM</span>'
+
+def detail_source_row(label, value_html, rism=False):
+    if not clean_str(value_html):
+        return ""
+    badge = detail_rism_label() if rism else ""
+    return f'<div class="detail-source-k-v10">{escape_textnode(label)}</div><div class="detail-source-v-v10"><span>{value_html}</span>{badge}</div>'
+
+def detail_holdings_html(raw):
+    lines = holdings_lines(raw)
+    if not lines:
+        return ""
+    lis = "".join(f"<li>{html.escape(ln, quote=False)}</li>" for ln in lines)
+    return f'''
+          <details class="detail-holdings-v10">
+            <summary><span class="detail-arrow-v10">›</span><span>Holdings ({len(lines)})</span>{detail_rism_label()}</summary>
+            <ul class="detail-holdings-list-v10">{lis}</ul>
+          </details>'''
+
+def detail_source_panel_html(rec):
+    if is_print_source_type(rec.get("source_type_raw", "")):
+        rows = []
+        if clean_str(rec.get("rism_date_raw", "")):
+            rows.append(detail_source_row("Date", escape_textnode(rec.get("rism_date_raw", "")), rism=True))
+        for label, value_html in parse_rism_publisher_printer_rows(rec.get("rism_publisher_printer_raw", "")):
+            rows.append(detail_source_row(label, value_html, rism=True))
+        if clean_str(rec.get("rism_publication_place_raw", "")):
+            rows.append(detail_source_row("Place", escape_textnode(rec.get("rism_publication_place_raw", "")), rism=True))
+        rows_html = "".join(rows) or '<div class="index-source-note">No edition data available.</div>'
+        return f'''
+        <aside class="detail-panel-v10">
+          <div class="detail-panel-title-v10">PRINT</div>
+          <div class="detail-source-grid-v10">{rows_html}</div>
+          {detail_holdings_html(rec.get("rism_holdings_raw", ""))}
+        </aside>'''
+
+    if is_manuscript_source_type(rec.get("source_type_raw", "")) or clean_str(rec.get("library_raw", "")) or clean_str(rec.get("shelfmark_raw", "")):
+        rows = []
+        if clean_str(rec.get("library_raw", "")):
+            rows.append(detail_source_row("Library", escape_textnode(rec.get("library_raw", "")), rism=False))
+        if clean_str(rec.get("shelfmark_raw", "")):
+            rows.append(detail_source_row("Shelfmark", f'<span class="source-shelfmark">{escape_textnode(rec.get("shelfmark_raw", ""))}</span>', rism=False))
+        if clean_str(rec.get("rism_date_raw", "")):
+            rows.append(detail_source_row("Date", escape_textnode(rec.get("rism_date_raw", "")), rism=True))
+        rows_html = "".join(rows) or '<div class="index-source-note">No source data available.</div>'
+        return f'''
+        <aside class="detail-panel-v10">
+          <div class="detail-panel-title-v10">MANUSCRIPT</div>
+          <div class="detail-source-grid-v10">{rows_html}</div>
+          {detail_holdings_html(rec.get("rism_holdings_raw", ""))}
+        </aside>'''
+
+    if clean_str(rec.get("source_type_raw", "")):
+        return f'''
+        <aside class="detail-panel-v10">
+          <div class="detail-panel-title-v10">SOURCE</div>
+          <div class="detail-source-grid-v10">{detail_source_row("Type", escape_textnode(rec.get("source_type_raw", "")), rism=False)}</div>
+        </aside>'''
+    return ""
+
+def detail_rism_record_html(rec):
+    rno = clean_numberish(rec.get("rism_no_raw", ""))
+    link = norm_url(rec.get("rism_link_raw", ""))
+    if not rno and not link:
+        return ""
+    rows = []
+    if rno:
+        rows.append(f'<div class="k">RISM No.</div><div class="v">{escape_textnode(rno)}</div>')
+    if link:
+        rows.append(f'<div class="k">Link</div><div class="v"><a href="{escape_attr(link)}" target="_blank" rel="noopener">View in RISM Online</a></div>')
+    return f'''
+        <details class="detail-doc-v10" open>
+          <summary><span>RISM record</span><span class="detail-arrow-v10">›</span></summary>
+          <div class="detail-doc-body-v10"><div class="detail-rism-record-grid-v10">{"".join(rows)}</div></div>
+        </details>'''
+
+def detail_doc_section_html(title, body_html, full_span=False):
+    if not clean_str(body_html):
+        return ""
+    full = " full-span" if full_span else ""
+    return f'''
+        <details class="detail-doc-v10{full}" open>
+          <summary><span>{escape_textnode(title)}</span><span class="detail-arrow-v10">›</span></summary>
+          <div class="detail-doc-body-v10">{body_html}</div>
+        </details>'''
+
+def detail_catalogue_bibliography_html(rec):
+    if rec.get("indiv_coll") == "VirtualColl":
+        return ""
+    bits = []
+    if clean_str(rec.get("instr_catalogs_raw", "")):
+        bits.append(f'<div class="detail-doc-subtitle-v10">Instrumentation from catalogues</div><div>{escape_with_italics(rec.get("instr_catalogs_raw", ""))}</div>')
+    if clean_str(rec.get("bibliography_raw", "")):
+        bits.append(f'<div class="detail-doc-subtitle-v10">Bibliography</div><div>{rec.get("bibliography", "")}</div>')
+    return detail_doc_section_html("Catalogue / Bibliography", "".join(bits), full_span=True)
+
+def detail_note_html(rec):
+    if rec.get("indiv_coll") == "VirtualColl" or not clean_str(rec.get("note_raw", "")):
+        return ""
+    return detail_doc_section_html("Notes", rec.get("note", ""), full_span=False)
+
+def detail_organology_html(rec):
+    if rec.get("indiv_coll") == "VirtualColl" or not clean_str(rec.get("organology_raw", "")):
+        return ""
+    return detail_doc_section_html("Organology", rec.get("organology", ""), full_span=False)
+
+def detail_instr_html(rec):
+    if rec.get("indiv_coll") == "VirtualColl":
+        return ""
+    bits = []
+    if clean_str(rec.get("instr_rism_main_raw", "")):
+        bits.append(escape_textnode(rec.get("instr_rism_main_raw", "")))
+    if clean_str(rec.get("instr_rism_alt_raw", "")):
+        bits.append('<span class="index-instr-alt-label">Alternative</span> ' + escape_textnode(rec.get("instr_rism_alt_raw", "")))
+    if not bits and clean_str(rec.get("instr_catalogs_raw", "")):
+        bits.append(escape_with_italics(rec.get("instr_catalogs_raw", "")))
+    if not bits:
+        return ""
+    return f'''
+          <div class="detail-instr-v10">
+            <span class="detail-instr-label-v10">Instrumentation</span>
+            <div>{"<br>".join(bits)}</div>
+          </div>'''
+
+def detail_content_html(ids_in_group, coll_id, records):
+    items = []
+    for pid in ids_in_group:
+        if coll_id and pid == coll_id:
+            continue
+        pr = records.get(pid)
+        if not pr:
+            continue
+        title = abbreviated_title_html(pr.get("title_raw", "") or "(Untitled)", max_len=92)
+        composer = pr.get("composer") or "Anonymous"
+        instr = index_instrumentation_html(pr) or '<span class="muted-value">—</span>'
+        items.append(f'''
+              <div class="detail-content-card-v10">
+                <div class="detail-content-ref-v10">{escape_textnode(pid)}</div>
+                <div class="detail-content-title-v10">{title}</div>
+                <div class="detail-content-composer-v10">{composer}</div>
+                <div class="detail-content-instr-v10">{instr}</div>
+                <div class="detail-content-link-v10"><a href="piece-{pid.replace('/','-')}.html" target="_blank" rel="noopener">Open single-work page</a></div>
+              </div>''')
+    if not items:
+        return ""
+    return f'''
+          <section class="detail-content-section-v10">
+            <div class="detail-content-title-label-v10">Content</div>
+            <div class="detail-content-list-v10">{"".join(items)}</div>
+          </section>'''
+
+def detail_concordances_html(rec, records, used_links_page):
+    if rec.get("indiv_coll") == "VirtualColl" or not rec.get("concordances_ids"):
+        return ""
+    cards_html = []
+    for cid in rec.get("concordances_ids", []):
+        cr = records.get(cid)
+        if not cr:
+            continue
+        mt = cr.get("music_type_raw", "")
+        stt = cr.get("source_type_raw", "")
+        mt_tag = f'<span class="tag tag-type">{escape_textnode(mt)}</span>' if mt else ""
+        st_tag = f'<span class="tag tag-source">{escape_textnode(stt)}</span>' if stt else ""
+        rchip = rism_chip_self(cr, used_links_page)
+        cards_html.append(f'''
+            <div class="conc-card">
+              <a class="conc-id-link" href="piece-{cid.replace('/','-')}.html" target="_blank" rel="noopener">{escape_textnode(cid)}</a>
+              <div class="conc-main">
+                <div class="conc-title">{cr.get("title") or "(Untitled)"}</div>
+                <div class="conc-composer">{cr.get("composer") or ""}</div>
+                <div class="conc-tags">{mt_tag}{st_tag}{rchip}</div>
+              </div>
+            </div>''')
+    if not cards_html:
+        return ""
+    return f'''
+        <details class="detail-doc-v10 detail-conc-block-v10 full-span" open>
+          <summary><span>Linked concordances</span><span class="detail-arrow-v10">›</span></summary>
+          <div class="conc-cards">{"".join(cards_html)}</div>
+        </details>'''
+
+def detail_work_or_collection_panel_html(rec, ids_in_group, coll_id, is_virtual_group, records):
+    is_collection = rec.get("indiv_coll") in ("Coll.", "VirtualColl")
+    panel_title = "COLLECTION" if is_collection else "WORK"
+    identity_html = ""
+    if clean_str(rec.get("composer_raw", "")):
+        identity_html = f'''
+          <div class="detail-identity-v10">
+            <div class="detail-identity-label-v10">Composer</div>
+            <div class="detail-identity-value-v10">{rec.get("composer")}</div>
+          </div>
+          <div class="detail-soft-rule-v10"></div>'''
+    else:
+        ident = manuscript_identity_raw(rec)
+        if not ident and is_collection:
+            child_recs = [records[z] for z in ids_in_group if z in records]
+            ident = first_manuscript_identity_raw(child_recs)
+        if ident:
+            identity_html = f'''
+          <div class="detail-identity-v10">
+            <div class="detail-identity-label-v10">Source</div>
+            <div class="detail-identity-value-v10 source-identity">{escape_textnode(ident)}</div>
+          </div>
+          <div class="detail-soft-rule-v10"></div>'''
+    title = rec.get("title") or "<em>(Untitled)</em>"
+    instr = detail_instr_html(rec)
+    content = detail_content_html(ids_in_group, coll_id, records) if is_collection else ""
+    return f'''
+        <section class="detail-panel-v10">
+          <div class="detail-panel-title-v10">{panel_title}</div>
+          {identity_html}
+          <div class="detail-title-full-v10">{title}</div>
+          {instr}
+          {content}
+        </section>'''
+
 detail_template = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=rism-edition-2026-05-29">
+  <link rel="stylesheet" href="style.css?v=detail-v10-2026-06-01">
 </head>
 <body>
 @@HEADER@@
-<main class="detail-shell">
+<main class="detail-shell-v10">
   <div class="breadcrumbs"><a href="index.html">ZinkNET index</a>@@BREADCRUMB@@</div>
   @@PARENT_BTN@@
-  <article class="detail-card">
-    <div class="detail-header">
-      <div>
-        <p class="detail-title">@@ID@@ — @@TITLE@@</p>
-        <p class="detail-composer">@@COMPOSER@@</p>
-      </div>
+  <article class="detail-page-v10">
+    <div class="detail-topline-v10">
+      <div class="detail-ref-v10">@@ID@@</div>
       <div class="detail-tags">@@TAGS@@</div>
     </div>
-
-    @@INSTR@@
-    <div class="piece-meta">@@META@@</div>
-    @@RISM_DRAWER@@
-    @@BIBLIO@@
-    @@NOTE@@
-    @@ORG@@
-    @@CONC@@
-    @@SUBPIECES@@
+    <div class="detail-columns-v10">
+      <div class="detail-left-stack-v10">
+        @@MAIN_PANEL@@
+        <div class="detail-lower-left-v10">
+          @@CATALOGUE_BIBLIOGRAPHY@@
+          @@NOTE@@
+          @@ORG@@
+          @@CONC@@
+        </div>
+      </div>
+      <div class="detail-right-stack-v10">
+        @@SOURCE_PANEL@@
+        @@RISM_RECORD@@
+      </div>
+    </div>
   </article>
 </main>
 </body>
@@ -3903,12 +4180,10 @@ def main():
                 sub_lines.append(f"""
               <div class="index-content-row subpiece-line" data-pid="{escape_attr(pid)}" data-composer-raw="{escape_attr(r.get('composer_raw',''))}">
                 <div><span class="index-piece-ref">{escape_textnode(pid)}</span></div>
-                <div>
-                  <div class="index-content-title">{content_title}</div>
-                  <div class="index-content-meta">{content_composer}</div>
-                  <div class="index-content-instr">{content_instr}</div>
-                  {('<div class="index-content-extra">' + ''.join(extras) + '</div>') if extras else ''}
-                </div>
+                <div class="index-content-title">{content_title}</div>
+                <div class="index-content-composer">{content_composer}</div>
+                <div class="index-content-instr">{content_instr}</div>
+                {('<div class="index-content-extra">' + ''.join(extras) + '</div>') if extras else ''}
               </div>""")
 
             left_panel_html = f"""
@@ -4234,139 +4509,13 @@ def main():
 
         tags_html = "".join(tags)
 
-        instr_block = "" if rec["indiv_coll"] == "VirtualColl" else build_instr_block_for_record(rec, include_catalogs=True)
-
-        meta_bits = []
-        if rec["indiv_coll"] != "VirtualColl" and rec["composer"]:
-            meta_bits.append(f'<div class="meta-block"><span class="label">Composer</span><span class="value">{rec["composer"]}</span></div>')
-
-        lib_val = rec["library"]
-        shelf_val = rec["shelfmark"]
-        if rec["see_rism"]:
-            if lib_val: lib_val += " "
-            lib_val += '<span class="see-rism-tag">See RISM</span>'
-            if shelf_val: shelf_val += " "
-            shelf_val += '<span class="see-rism-tag">See RISM</span>'
-
-        if lib_val:
-            meta_bits.append(f'<div class="meta-block"><span class="label">Library</span><span class="value">{lib_val}</span></div>')
-        if shelf_val:
-            meta_bits.append(f'<div class="meta-block"><span class="label">Shelfmark</span><span class="value">{shelf_val}</span></div>')
-
-        meta_html = "".join(meta_bits)
-
-        rism_drawer = ""
-        rism_date = clean_str(rec.get("rism_date_raw",""))
-        rism_holdings = clean_str(rec.get("rism_holdings_raw",""))
-        rism_holdings_count = len(holdings_lines(rism_holdings))
-
-        if rism_date or rism_holdings:
-            open_attr = " open" if rism_holdings else ""
-            pills = []
-            if rism_date:
-                pills.append(f'<span class="pill">Date: {escape_textnode(rism_date)}</span>')
-            if rism_holdings_count:
-                pills.append(f'<span class="pill" style="opacity:.9;">Holdings: {rism_holdings_count}</span>')
-            pills_html = "".join(pills)
-
-            kv_rows = []
-            if rism_date:
-                kv_rows.append(f'<div class="k">Date</div><div class="v">{escape_textnode(rism_date)}</div>')
-            if rism_holdings:
-                kv_rows.append(f'<div class="k">Holdings</div><div class="v">{holdings_list_html(rism_holdings)}</div>')
-
-            rism_drawer = f"""
-    <details class="rism"{open_attr}>
-      <summary>
-        <div class="rism-left">
-          <span class="rism-title">RISM</span>
-          <div class="rism-mini">{pills_html}</div>
-        </div>
-      </summary>
-      <div class="rism-body">
-        <div class="rism-kv">
-          {''.join(kv_rows)}
-        </div>
-      </div>
-    </details>
-"""
-
-        biblio_html = f'<div class="piece-notes"><div class="label">Bibliography:</div><div class="value">{rec["bibliography"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["bibliography"]) else ""
-        note_html = f'<div class="piece-notes"><div class="label">Note:</div><div class="value">{rec["note"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["note"]) else ""
-        org_html = f'<div class="piece-notes"><div class="label">Organology:</div><div class="value">{rec["organology"]}</div></div>' if (rec["indiv_coll"]!="VirtualColl" and rec["organology"]) else ""
-
-        conc_html = ""
-        if rec["indiv_coll"] != "VirtualColl" and rec["concordances_ids"]:
-            cards_html = []
-            for cid in rec["concordances_ids"]:
-                cr = records.get(cid)
-                if not cr:
-                    continue
-                mt = cr["music_type_raw"]
-                stt = cr["source_type_raw"]
-                mt_tag = f'<span class="tag tag-type">{escape_textnode(mt)}</span>' if mt else ""
-                st_tag = f'<span class="tag tag-source">{escape_textnode(stt)}</span>' if stt else ""
-                rchip = rism_chip_self(cr, used_links_page)
-                cards_html.append(f"""
-      <div class="conc-card">
-        <a class="conc-id-link" href="piece-{cid.replace('/','-')}.html" target="_blank" rel="noopener">{escape_textnode(cid)}</a>
-        <div class="conc-main">
-          <div class="conc-title">{cr["title"] or "(Untitled)"}</div>
-          <div class="conc-composer">{cr["composer"] or ""}</div>
-          <div class="conc-tags">{mt_tag}{st_tag}{rchip}</div>
-        </div>
-      </div>""")
-            conc_html = f"""
-    <div class="conc-block">
-      <div class="conc-heading">Linked concordances</div>
-      <div class="conc-cards">
-        {''.join(cards_html)}
-      </div>
-    </div>"""
-
-        subpieces_html = ""
-        if rec["indiv_coll"] in ("Coll.", "VirtualColl"):
-            sub_entries = []
-            for pid in ids_in_group:
-                if coll_id and pid == coll_id:
-                    continue
-                pr = records.get(pid)
-                if not pr:
-                    continue
-
-                sub_instr = "" if pr["indiv_coll"] == "VirtualColl" else build_instr_block_for_record(pr, include_catalogs=True)
-
-                sub_conc = ""
-                if pr["concordances_ids"]:
-                    n = len(pr["concordances_ids"])
-                    sub_conc = f'<div class="sub-entry-conc"><span class="tag tag-conc">{n} concordance{"s" if n!=1 else ""}</span></div>'
-
-                sub_rism = rism_chip_self(pr, used_links_page)
-
-                sub_entries.append(f"""
-    <details class="sub-entry">
-      <summary>
-        <div class="sub-entry-header">
-          <div class="sub-entry-title">{escape_textnode(pid)} — {pr["title"] or "(Untitled)"}</div>
-          <div class="sub-entry-composer">{pr["composer"] or ""}</div>
-        </div>
-      </summary>
-      <div class="sub-entry-body">
-        {sub_instr}
-        <div class="subpiece-link" style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          <a href="piece-{pid.replace('/','-')}.html" target="_blank" rel="noopener">Open piece page</a>
-          {sub_rism}
-        </div>
-        {sub_conc}
-      </div>
-    </details>
-            """)
-
-            subpieces_html = f"""
-    <div class="detail-subpieces">
-      <div class="subpieces-title">Contents</div>
-      {''.join(sub_entries)}
-    </div>"""
+        main_panel_html = detail_work_or_collection_panel_html(rec, ids_in_group, coll_id, is_virtual_group, records)
+        source_panel_html = detail_source_panel_html(rec)
+        rism_record_html = detail_rism_record_html(rec)
+        catalogue_bibliography_html = detail_catalogue_bibliography_html(rec)
+        note_html = detail_note_html(rec)
+        org_html = detail_organology_html(rec)
+        conc_html = detail_concordances_html(rec, records, used_links_page)
 
         title_full = f"{zid} — {rec['title_raw'] or '(Untitled)'}"
         page_html = (
@@ -4376,17 +4525,14 @@ def main():
             .replace("@@BREADCRUMB@@", breadcrumb_extra)
             .replace("@@PARENT_BTN@@", parent_btn)
             .replace("@@ID@@", escape_textnode(zid))
-            .replace("@@TITLE@@", rec["title"] or "<em>(Untitled)</em>")
-            .replace("@@COMPOSER@@", rec["composer"] or "")
             .replace("@@TAGS@@", tags_html)
-            .replace("@@INSTR@@", instr_block)
-            .replace("@@META@@", meta_html)
-            .replace("@@RISM_DRAWER@@", rism_drawer)
-            .replace("@@BIBLIO@@", biblio_html)
+            .replace("@@MAIN_PANEL@@", main_panel_html)
+            .replace("@@SOURCE_PANEL@@", source_panel_html)
+            .replace("@@RISM_RECORD@@", rism_record_html)
+            .replace("@@CATALOGUE_BIBLIOGRAPHY@@", catalogue_bibliography_html)
             .replace("@@NOTE@@", note_html)
             .replace("@@ORG@@", org_html)
             .replace("@@CONC@@", conc_html)
-            .replace("@@SUBPIECES@@", subpieces_html)
         )
         (OUT_DIR / f"piece-{zid.replace('/','-')}.html").write_text(page_html, encoding="utf-8")
 
