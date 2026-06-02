@@ -167,24 +167,43 @@ def format_uniform_instr_content(raw_text):
     """
     Format uniform instrumentation content wherever it is displayed.
 
-    Any 'LABEL: { ... }' becomes its own line block and braces are removed:
-      ChI: { ... }, ChII: { ... }
-    becomes:
-      ChI: ...
-      ChII: ...
+    Rules:
+      - LABEL: { ... } becomes its own line, with braces removed:
+            Cap: {V (5), vl (2)}  ->  Cap: V (5), vl (2)
+      - { ... } without a label also becomes its own line, with braces removed.
+      - Any remaining material outside braces is preserved and placed on a clean line
+        when it follows or precedes brace groups.
 
-    This returns only the formatted HTML content, without adding a section heading.
+    Examples:
+      {S (2), A (1)}, Cap: {V (5)}, trb (2)
+      ->
+      S (2), A (1)
+      Cap: V (5)
+      trb (2)
+
+    This returns only formatted HTML content, without adding a section heading.
     """
     s = clean_str(raw_text)
     if not s:
         return ""
 
-    def repl(m):
+    def repl_labeled(m):
         label = m.group(1).strip().strip(",; ")
         content = m.group(2).strip()
         return f"\n{label} {content}\n"
 
-    t2 = re.sub(r'([^{}\n\r,;]+:\s*)\{([^}]*)\}', repl, s)
+    def repl_unlabeled(m):
+        content = m.group(1).strip()
+        return f"\n{content}\n"
+
+    # First preserve labels immediately attached to a brace group.
+    t2 = re.sub(r'([^{}\n\r,;]+:\s*)\{([^{}]*)\}', repl_labeled, s)
+
+    # Then isolate any remaining brace group without a label.
+    t2 = re.sub(r'\{([^{}]*)\}', repl_unlabeled, t2)
+
+    # Clean separators around line breaks created by the brace expansion.
+    t2 = re.sub(r'\s*[,;]\s*\n', '\n', t2)
     t2 = re.sub(r'\n\s*[,;]\s*', '\n', t2)
     t2 = re.sub(r'\n+', '\n', t2).strip(' \n,;')
     if not t2.strip():
@@ -1579,7 +1598,7 @@ dd.meta-value {
 
 .index-instr-variant{
   display:grid;
-  grid-template-columns:minmax(0,72px) minmax(0,1fr);
+  grid-template-columns:minmax(108px,125px) minmax(0,1fr);
   gap:7px;
   align-items:start;
 }
@@ -1591,6 +1610,7 @@ dd.meta-value {
   letter-spacing:.10em;
   font-weight:750;
   line-height:1.25;
+  white-space:nowrap;
 }
 
 .index-instr-variant-content{
@@ -2392,7 +2412,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v13-uniform-instr-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v14-uniform-instr-braces-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -3933,7 +3953,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v13-uniform-instr-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v14-uniform-instr-braces-2026-06-02">
 </head>
 <body>
 @@HEADER@@
