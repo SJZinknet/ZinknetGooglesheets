@@ -163,27 +163,47 @@ def unique_preserve_order(items):
             out.append(item)
     return out
 
-def format_uniform_instr(raw_text, alternative=False):
+def format_uniform_instr_content(raw_text):
     """
-    Any 'LABEL: { ... }' becomes its own line block (braces removed).
+    Format uniform instrumentation content wherever it is displayed.
+
+    Any 'LABEL: { ... }' becomes its own line block and braces are removed:
+      ChI: { ... }, ChII: { ... }
+    becomes:
+      ChI: ...
+      ChII: ...
+
+    This returns only the formatted HTML content, without adding a section heading.
     """
     s = clean_str(raw_text)
     if not s:
         return ""
 
     def repl(m):
-        label = m.group(1).strip()
+        label = m.group(1).strip().strip(",; ")
         content = m.group(2).strip()
         return f"\n{label} {content}\n"
 
-    t2 = re.sub(r'([^:]+:\s*)\{([^}]*)\}', repl, s)
-    t2 = re.sub(r'\n\s*,\s*', '\n', t2)
-    t2 = re.sub(r'\n+', '\n', t2).strip(' \n,')
+    t2 = re.sub(r'([^{}\n\r,;]+:\s*)\{([^}]*)\}', repl, s)
+    t2 = re.sub(r'\n\s*[,;]\s*', '\n', t2)
+    t2 = re.sub(r'\n+', '\n', t2).strip(' \n,;')
     if not t2.strip():
         return ""
 
+    return html.escape(t2, quote=False).replace("\n", "<br>")
+
+
+def format_uniform_instr(raw_text, alternative=False):
+    """
+    Legacy full block formatter.
+    Kept for older index/detail blocks, now using the same content formatter
+    as the v10/v12 rendering.
+    """
+    body = format_uniform_instr_content(raw_text)
+    if not body:
+        return ""
+
     heading = "UNIFORM INSTRUMENTATION (ALTERNATIVE)" if alternative else "UNIFORM INSTRUMENTATION"
-    body = html.escape(t2, quote=False).replace("\n", "<br>")
     return f'<strong class="instr-label">{heading}</strong><div class="instr-content">{body}</div>'
 
 def parse_zinknet(no):
@@ -1552,6 +1572,32 @@ dd.meta-value {
   font-weight:750;
 }
 
+.index-instr-variants{
+  display:grid;
+  gap:3px;
+}
+
+.index-instr-variant{
+  display:grid;
+  grid-template-columns:minmax(0,72px) minmax(0,1fr);
+  gap:7px;
+  align-items:start;
+}
+
+.index-instr-variant-label{
+  color:#53618a;
+  font-size:.68rem;
+  text-transform:uppercase;
+  letter-spacing:.10em;
+  font-weight:750;
+  line-height:1.25;
+}
+
+.index-instr-variant-content{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
 .index-source-grid{
   display:grid;
   grid-template-columns:minmax(0,76px) minmax(0,1fr);
@@ -1984,6 +2030,10 @@ details.rism > summary::-webkit-details-marker{display:none}
 .detail-title-full-v10{font-size:1rem;font-weight:500;color:#1f2937;line-height:1.32;overflow-wrap:anywhere;}
 .detail-instr-v10{margin-top:10px;border-top:1px solid #e1e5f5;padding-top:9px;color:#1f2937;font-size:.91rem;line-height:1.38;overflow-wrap:anywhere;}
 .detail-instr-label-v10,.detail-content-title-label-v10{display:block;font-size:.70rem;text-transform:uppercase;letter-spacing:.12em;color:#25345f;font-weight:760;margin-bottom:4px;}
+.detail-instr-variants-v10{display:flex;flex-direction:column;gap:8px;}
+.detail-instr-variant-v10{display:grid;grid-template-columns:minmax(0,88px) minmax(0,1fr);gap:10px;align-items:start;}
+.detail-instr-variant-label-v10{font-size:.68rem;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);font-weight:760;line-height:1.25;}
+.detail-instr-variant-content-v10{min-width:0;overflow-wrap:anywhere;}
 .detail-source-grid-v10,.detail-rism-record-grid-v10{display:grid;grid-template-columns:minmax(0,82px) minmax(0,1fr);gap:6px 10px;align-items:start;}
 .detail-source-k-v10,.detail-rism-record-grid-v10 .k{font-size:.77rem;color:var(--muted);font-weight:680;}
 .detail-source-v-v10,.detail-rism-record-grid-v10 .v{font-size:.86rem;color:#1f2937;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-family:inherit;}
@@ -2015,7 +2065,7 @@ details.rism > summary::-webkit-details-marker{display:none}
 .index-content-title{grid-column:2;font-weight:760;}
 .index-content-composer{grid-column:3;grid-row:1;color:var(--muted);font-size:.78rem;text-align:right;line-height:1.25;}
 .index-content-instr{grid-column:2 / 4;}.index-content-extra{grid-column:2 / 4;}
-@media (max-width:760px){.index-content-row.subpiece-line,.detail-content-card-v10{grid-template-columns:minmax(48px,58px) minmax(0,1fr);}.index-content-composer,.detail-content-composer-v10{grid-column:2;grid-row:auto;text-align:left;}.index-content-instr,.index-content-extra,.detail-content-instr-v10,.detail-content-link-v10{grid-column:2;}}
+@media (max-width:760px){.index-content-row.subpiece-line,.detail-content-card-v10{grid-template-columns:minmax(48px,58px) minmax(0,1fr);}.index-content-composer,.detail-content-composer-v10{grid-column:2;grid-row:auto;text-align:left;}.index-content-instr,.index-content-extra,.detail-content-instr-v10,.detail-content-link-v10{grid-column:2;}.index-instr-variant,.detail-instr-variant-v10{grid-template-columns:1fr;gap:2px;}}
 @media (min-width:901px){.detail-doc-v10 summary .detail-arrow-v10{display:none;}}
 @media (max-width:900px){.detail-columns-v10{grid-template-columns:1fr;}.detail-topline-v10{flex-direction:column;}.detail-tags{justify-content:flex-start;}.detail-doc-v10 summary{cursor:pointer;}}
 
@@ -2174,19 +2224,31 @@ def index_primary_label_raw(rec, group_recs=None):
 def index_instrumentation_html(rec):
     """
     Compact instrumentation block for the open index card.
-    It keeps the information close to WORK / CONTENTS instead of showing it as a detached old-style pill.
+
+    If both principal and alternative instrumentations exist, use a compact
+    Principal / Alternative two-row layout. If only one instrumentation exists,
+    do not add an extra Principal label.
     """
-    bits = []
-    if clean_str(rec.get("instr_rism_main_raw", "")):
-        bits.append(escape_textnode(rec.get("instr_rism_main_raw", "")))
-    if clean_str(rec.get("instr_rism_alt_raw", "")):
-        bits.append(
-            '<span class="index-instr-alt-label">Alternative</span> '
-            + escape_textnode(rec.get("instr_rism_alt_raw", ""))
+    main_html = format_uniform_instr_content(rec.get("instr_rism_main_raw", ""))
+    alt_html = format_uniform_instr_content(rec.get("instr_rism_alt_raw", ""))
+
+    if main_html and alt_html:
+        return (
+            '<div class="index-instr-variants">'
+            '<div class="index-instr-variant"><span class="index-instr-variant-label">Principal</span>'
+            f'<span class="index-instr-variant-content">{main_html}</span></div>'
+            '<div class="index-instr-variant"><span class="index-instr-variant-label">Alternative</span>'
+            f'<span class="index-instr-variant-content">{alt_html}</span></div>'
+            '</div>'
         )
-    if not bits and clean_str(rec.get("instr_catalogs_raw", "")):
-        bits.append(escape_with_italics(rec.get("instr_catalogs_raw", "")))
-    return "<br>".join(bits)
+
+    if main_html:
+        return main_html
+    if alt_html:
+        return alt_html
+    if clean_str(rec.get("instr_catalogs_raw", "")):
+        return escape_with_italics(rec.get("instr_catalogs_raw", ""))
+    return ""
 
 def parse_rism_publisher_printer_rows(raw):
     """
@@ -2330,7 +2392,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v12-main-tint-2026-06-01">
+  <link rel="stylesheet" href="style.css?v=detail-v13-uniform-instr-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -3743,19 +3805,34 @@ def detail_instr_html(rec):
     # Do not fill the main Instrumentation block from Instrumentation from Catalogs.
     if detail_is_collection_record(rec):
         return ""
-    bits = []
-    if clean_str(rec.get("instr_rism_main_raw", "")):
-        bits.append(escape_textnode(rec.get("instr_rism_main_raw", "")))
-    if clean_str(rec.get("instr_rism_alt_raw", "")):
-        bits.append('<span class="index-instr-alt-label">Alternative</span> ' + escape_textnode(rec.get("instr_rism_alt_raw", "")))
-    if not bits and clean_str(rec.get("instr_catalogs_raw", "")):
-        bits.append(escape_with_italics(rec.get("instr_catalogs_raw", "")))
-    if not bits:
-        return ""
+
+    main_html = format_uniform_instr_content(rec.get("instr_rism_main_raw", ""))
+    alt_html = format_uniform_instr_content(rec.get("instr_rism_alt_raw", ""))
+
+    if main_html and alt_html:
+        body = f'''
+            <div class="detail-instr-variants-v10">
+              <div class="detail-instr-variant-v10">
+                <div class="detail-instr-variant-label-v10">Principal</div>
+                <div class="detail-instr-variant-content-v10">{main_html}</div>
+              </div>
+              <div class="detail-instr-variant-v10">
+                <div class="detail-instr-variant-label-v10">Alternative</div>
+                <div class="detail-instr-variant-content-v10">{alt_html}</div>
+              </div>
+            </div>'''
+    else:
+        single_html = main_html or alt_html
+        if not single_html and clean_str(rec.get("instr_catalogs_raw", "")):
+            single_html = escape_with_italics(rec.get("instr_catalogs_raw", ""))
+        if not single_html:
+            return ""
+        body = f'<div>{single_html}</div>'
+
     return f'''
           <div class="detail-instr-v10">
             <span class="detail-instr-label-v10">Instrumentation</span>
-            <div>{"<br>".join(bits)}</div>
+            {body}
           </div>'''
 
 def detail_content_html(ids_in_group, coll_id, records):
@@ -3856,7 +3933,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v12-main-tint-2026-06-01">
+  <link rel="stylesheet" href="style.css?v=detail-v13-uniform-instr-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -4523,6 +4600,8 @@ def main():
         org_html = detail_organology_html(rec)
         conc_html = detail_concordances_html(rec, records, used_links_page)
 
+        detail_display_id = group_id(zid) if (detail_is_collection_record(rec) and clean_str(zid).endswith("/0")) else zid
+
         title_full = f"{zid} — {rec['title_raw'] or '(Untitled)'}"
         page_html = (
             detail_template
@@ -4530,7 +4609,7 @@ def main():
             .replace("@@HEADER@@", build_header_html())
             .replace("@@BREADCRUMB@@", breadcrumb_extra)
             .replace("@@PARENT_BTN@@", parent_btn)
-            .replace("@@ID@@", escape_textnode(zid))
+            .replace("@@ID@@", escape_textnode(detail_display_id))
             .replace("@@TAGS@@", tags_html)
             .replace("@@MAIN_PANEL@@", main_panel_html)
             .replace("@@SOURCE_PANEL@@", source_panel_html)
