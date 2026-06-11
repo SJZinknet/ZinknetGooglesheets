@@ -18,6 +18,7 @@
 # - Smart collection filtering for Search Tool, chronology, composer, bibliography,
 #   holdings/libraries, and RISM number.
 # - RISM edition information for prints: Publisher / Printer + Publication Place.
+# - v15 display fix: dropdown layering + instrumentation simple-search suggestions.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -976,6 +977,19 @@ details.filter-section[open]{
   box-shadow:0 8px 22px rgba(15,23,42,0.07);
 }
 
+/* Active floating menus must rise above the following filter sections.
+   The menu itself is constrained by the stacking context of its parent details. */
+details.filter-section.dropdown-active{
+  z-index:10000;
+}
+
+details.filter-section.dropdown-active .composer-list,
+details.filter-section.dropdown-active .instr-list,
+details.filter-section.dropdown-active .wide-dropdown-menu,
+details.filter-section.dropdown-active .library-list{
+  z-index:10001;
+}
+
 details.filter-section > summary{
   list-style:none;
   cursor:pointer;
@@ -1055,9 +1069,9 @@ details.filter-section[open] .section-arrow{
   border:1px solid var(--border-subtle);
   border-radius:14px;
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
-  max-height:5000px;
+  max-height:260px;
   overflow:auto;
-  z-index:80;
+  z-index:5000;
   padding:6px;
 }
 
@@ -2412,7 +2426,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v14-uniform-instr-braces-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v15-dropdown-display-fixes-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -2833,6 +2847,55 @@ index_template = """<!doctype html>
     applySort();
   });
 
+  // ============ Floating dropdown layering
+  function dropdownSectionFor(el){
+    return el ? el.closest('details.filter-section') : null;
+  }
+
+  function clearDropdownActiveSections(){
+    document.querySelectorAll('details.filter-section.dropdown-active').forEach(sec => {
+      sec.classList.remove('dropdown-active');
+    });
+  }
+
+  function activateDropdownSection(el){
+    clearDropdownActiveSections();
+    const sec = dropdownSectionFor(el);
+    if(sec) sec.classList.add('dropdown-active');
+  }
+
+  function anyFloatingMenuOpen(){
+    return (
+      (composerMenu && composerMenu.style.display === 'block') ||
+      (instrMenu && instrMenu.style.display === 'block') ||
+      (bibMenu && bibMenu.style.display === 'block') ||
+      (libraryMenu && libraryMenu.style.display === 'block')
+    );
+  }
+
+  function clearDropdownActiveIfNoneOpen(){
+    if(!anyFloatingMenuOpen()) clearDropdownActiveSections();
+  }
+
+  function closeAllFloatingMenus(except){
+    if(except !== 'composer'){
+      composerMenu.style.display = 'none';
+      composerList.innerHTML = '';
+    }
+    if(except !== 'instr' && instrMenu){
+      instrMenu.style.display = 'none';
+      instrList.innerHTML = '';
+    }
+    if(except !== 'bib'){
+      bibMenu.style.display = 'none';
+    }
+    if(except !== 'library'){
+      libraryMenu.style.display = 'none';
+      libraryList.innerHTML = '';
+    }
+    clearDropdownActiveSections();
+  }
+
   // ============ Composer dropdown
   const WORD_RE = /[A-Za-zÀ-ÖØ-öø-ÿ]+/g;
   function wordsOnly(s){ return (normalize(s).match(WORD_RE) || []); }
@@ -2844,9 +2907,11 @@ index_template = """<!doctype html>
   function closeComposerMenu(){
     composerMenu.style.display = 'none';
     composerList.innerHTML = '';
+    clearDropdownActiveIfNoneOpen();
   }
 
   function openComposerMenu(items){
+    closeAllFloatingMenus('composer');
     composerList.innerHTML = '';
     items.forEach(obj => {
       const div = document.createElement('div');
@@ -2861,6 +2926,8 @@ index_template = """<!doctype html>
       composerList.appendChild(div);
     });
     composerMenu.style.display = items.length ? 'block' : 'none';
+    if(items.length) activateDropdownSection(composerMenu);
+    else clearDropdownActiveIfNoneOpen();
   }
 
   function computeComposerHits(){
@@ -2914,6 +2981,56 @@ index_template = """<!doctype html>
     opt.textContent = `${o.k} (${o.n})`;
     stInstr.appendChild(opt);
   });
+
+  function closeInstrMenu(){
+    if(!instrMenu) return;
+    instrMenu.style.display = 'none';
+    instrList.innerHTML = '';
+    clearDropdownActiveIfNoneOpen();
+  }
+
+  function computeInstrHits(){
+    const q = normalizeLoose(instrInput.value);
+    if(!q) return [];
+    const hits = [];
+    for(const obj of SEARCH_TOOL_INSTRS){
+      const key = normalizeLoose(obj.k);
+      if(key.includes(q)){
+        hits.push(obj);
+        if(hits.length >= 35) break;
+      }
+    }
+    return hits;
+  }
+
+  function openInstrMenu(items){
+    if(!instrMenu) return;
+    closeAllFloatingMenus('instr');
+    instrList.innerHTML = '';
+    items.forEach(obj => {
+      const div = document.createElement('div');
+      div.className = 'instr-item';
+
+      const name = document.createElement('span');
+      name.textContent = obj.k;
+
+      const count = document.createElement('span');
+      count.className = 'instr-item-count';
+      count.textContent = obj.n;
+
+      div.appendChild(name);
+      div.appendChild(count);
+      div.addEventListener('click', () => {
+        instrInput.value = obj.k;
+        closeInstrMenu();
+        applyFilters();
+      });
+      instrList.appendChild(div);
+    });
+    instrMenu.style.display = items.length ? 'block' : 'none';
+    if(items.length) activateDropdownSection(instrMenu);
+    else clearDropdownActiveIfNoneOpen();
+  }
 
   function renderStRules(){
     stActive.innerHTML = '';
@@ -2972,10 +3089,13 @@ index_template = """<!doctype html>
 
   function closeBibMenu(){
     bibMenu.style.display = 'none';
+    clearDropdownActiveIfNoneOpen();
   }
 
   function openBibMenu(){
+    closeAllFloatingMenus('bib');
     bibMenu.style.display = 'block';
+    activateDropdownSection(bibMenu);
   }
 
   function toggleBibMenu(){
@@ -3052,9 +3172,11 @@ index_template = """<!doctype html>
   function closeLibraryMenu(){
     libraryMenu.style.display = 'none';
     libraryList.innerHTML = '';
+    clearDropdownActiveIfNoneOpen();
   }
 
   function openLibraryMenu(items){
+    closeAllFloatingMenus('library');
     libraryList.innerHTML = '';
     items.forEach(obj => {
       const div = document.createElement('div');
@@ -3073,6 +3195,8 @@ index_template = """<!doctype html>
       libraryList.appendChild(div);
     });
     libraryMenu.style.display = items.length ? 'block' : 'none';
+    if(items.length) activateDropdownSection(libraryMenu);
+    else clearDropdownActiveIfNoneOpen();
   }
 
   function computeLibraryHits(){
@@ -3203,6 +3327,7 @@ index_template = """<!doctype html>
     closeComposerMenu();
 
     instrInput.value = '';
+    closeInstrMenu();
     yearFrom.value = '';
     yearTo.value = '';
 
@@ -3676,7 +3801,16 @@ index_template = """<!doctype html>
 
   // ============ Listeners
   searchInput.addEventListener('input', applyFilters);
-  instrInput.addEventListener('input', applyFilters);
+  instrInput.addEventListener('input', () => {
+    applyFilters();
+    const hits = computeInstrHits();
+    if(!hits.length) closeInstrMenu();
+    else openInstrMenu(hits);
+  });
+  instrInput.addEventListener('focus', () => {
+    const hits = computeInstrHits();
+    if(hits.length) openInstrMenu(hits);
+  });
   yearFrom.addEventListener('input', applyFilters);
   yearTo.addEventListener('input', applyFilters);
   musicFilter.addEventListener('change', applyFilters);
@@ -3700,6 +3834,7 @@ index_template = """<!doctype html>
     if(!bibMenu.contains(ev.target) && ev.target !== bibToggle){
       closeBibMenu();
     }
+    clearDropdownActiveIfNoneOpen();
   });
 
   applySort();
@@ -3953,7 +4088,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v14-uniform-instr-braces-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v15-dropdown-display-fixes-2026-06-02">
 </head>
 <body>
 @@HEADER@@
