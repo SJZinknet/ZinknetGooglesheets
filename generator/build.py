@@ -692,7 +692,8 @@ header.app-header {
   background: linear-gradient(to right,rgba(255,255,255,0.98),rgba(245,247,255,0.96));
   position: sticky;
   top:0;
-  z-index:20;
+  /* Must stay above filter sections and their floating menus. */
+  z-index:1000;
   backdrop-filter: blur(10px);
 }
 
@@ -971,23 +972,24 @@ details.filter-section{
 }
 
 details.filter-section[open]{
-  z-index:100;
+  /* Above closed filter sections, but still below the sticky header. */
+  z-index:20;
   background:#ffffff;
   border-color:var(--border-strong);
   box-shadow:0 8px 22px rgba(15,23,42,0.07);
 }
 
-/* Active floating menus must rise above the following filter sections.
-   The menu itself is constrained by the stacking context of its parent details. */
+/* Active floating menus must rise above the following filter sections,
+   but the whole filter stack must remain below the sticky header. */
 details.filter-section.dropdown-active{
-  z-index:10000;
+  z-index:200;
 }
 
 details.filter-section.dropdown-active .composer-list,
 details.filter-section.dropdown-active .instr-list,
 details.filter-section.dropdown-active .wide-dropdown-menu,
 details.filter-section.dropdown-active .library-list{
-  z-index:10001;
+  z-index:220;
 }
 
 details.filter-section > summary{
@@ -1071,7 +1073,7 @@ details.filter-section[open] .section-arrow{
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
   max-height:260px;
   overflow:auto;
-  z-index:5000;
+  z-index:30;
   padding:6px;
 }
 
@@ -1132,7 +1134,7 @@ details.filter-section[open] .section-arrow{
 .wide-dropdown-menu{
   display:none;
   position:absolute;
-  z-index:5000;
+  z-index:30;
   top:calc(100% + 5px);
   left:0;
   width:min(760px, calc(100vw - 54px));
@@ -1220,7 +1222,7 @@ details.filter-section[open] .section-arrow{
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
   max-height:260px;
   overflow:auto;
-  z-index:5000;
+  z-index:30;
   padding:6px;
 }
 
@@ -1944,7 +1946,7 @@ dd.meta-value {
   box-shadow:0 14px 30px rgba(15,23,42,0.10);
   max-height:240px;
   overflow:auto;
-  z-index:5000;
+  z-index:30;
   padding:6px;
 }
 
@@ -2426,7 +2428,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v15-dropdown-display-fixes-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v16-layering-fix-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -4088,7 +4090,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v15-dropdown-display-fixes-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v16-layering-fix-2026-06-02">
 </head>
 <body>
 @@HEADER@@
