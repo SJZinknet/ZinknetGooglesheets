@@ -806,11 +806,42 @@ h1{
 }
 
 /* Layout */
-.shell { max-width:1400px; margin:0 auto; padding:16px 20px 26px; }
-.layout { display:grid; grid-template-columns: minmax(260px,320px) minmax(0,1fr); gap:16px; }
+.shell {
+  max-width:1800px;
+  margin-left:clamp(16px, 3vw, 64px);
+  margin-right:auto;
+  padding:16px 20px 26px;
+}
+
+.layout {
+  display:grid;
+  grid-template-columns: minmax(260px,320px) minmax(0,1fr);
+  gap:16px;
+  align-items:stretch;
+}
+
+.search-card{
+  align-self:start;
+}
+
+.catalogue-card{
+  display:flex;
+  flex-direction:column;
+  min-height:calc(100vh - 170px);
+}
 
 @media (max-width: 960px) {
+  .shell {
+    margin-left:0;
+    margin-right:0;
+  }
+
   .layout { grid-template-columns: 1fr; }
+
+  .catalogue-card{
+    height:auto !important;
+    min-height:0;
+  }
 }
 
 .card {
@@ -1239,7 +1270,9 @@ details.filter-section[open] .section-arrow{
 }
 
 .entries {
-  max-height: calc(100vh - 170px);
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
   overflow:auto;
   padding-right:4px;
 }
@@ -2428,7 +2461,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v16-layering-fix-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v17-layout-height-centering-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -2656,7 +2689,7 @@ index_template = """<!doctype html>
       </div>
     </section>
 
-    <section class="card">
+    <section class="card catalogue-card" id="catalogueCard">
       <div class="catalogue-head">
         <h2>Catalogue</h2>
         <div class="catalogue-sort">
@@ -2711,6 +2744,8 @@ index_template = """<!doctype html>
   const sortBy = document.getElementById('sortBy');
 
   const entriesContainer = document.getElementById('entries');
+  const catalogueCard = document.getElementById('catalogueCard');
+  const searchCard = document.querySelector('.search-card');
   const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
   const noResults = document.getElementById('noResults');
 
@@ -2721,6 +2756,29 @@ index_template = """<!doctype html>
   resultCount.style.color = 'var(--muted)';
   resultCount.style.fontWeight = '600';
   entriesContainer.insertAdjacentElement('beforebegin', resultCount);
+
+  function syncCatalogueHeight(){
+    if(!catalogueCard || !searchCard) return;
+
+    if(window.innerWidth <= 960){
+      catalogueCard.style.height = '';
+      return;
+    }
+
+    const header = document.querySelector('header.app-header');
+    const headerH = header ? header.offsetHeight : 0;
+    const viewportTarget = Math.max(520, window.innerHeight - headerH - 42);
+
+    // The catalogue card follows the full open-filter column height,
+    // while keeping a useful viewport-based minimum when few filters are open.
+    const filterTarget = searchCard.offsetHeight || 0;
+    const target = Math.max(filterTarget, viewportTarget);
+    catalogueCard.style.height = `${target}px`;
+  }
+
+  function scheduleCatalogueHeightSync(){
+    window.requestAnimationFrame(syncCatalogueHeight);
+  }
 
   function countVisibleSubpieces(card) {
     const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
@@ -3686,6 +3744,11 @@ index_template = """<!doctype html>
 
   updateMsDetailVisibility();
 
+  document.querySelectorAll('details.filter-section').forEach(section => {
+    section.addEventListener('toggle', scheduleCatalogueHeightSync);
+  });
+  window.addEventListener('resize', scheduleCatalogueHeightSync);
+
   // ============ Main filter
   function applyFilters() {
     const q  = normalize(searchInput.value);
@@ -3799,6 +3862,7 @@ index_template = """<!doctype html>
 
     noResults.style.display = visible ? 'none' : '';
     updateResultCount(visible, matchingPieces, pieceLevelActive);
+    scheduleCatalogueHeightSync();
   }
 
   // ============ Listeners
@@ -3841,6 +3905,7 @@ index_template = """<!doctype html>
 
   applySort();
   applyFilters();
+  scheduleCatalogueHeightSync();
 </script>
 </body>
 </html>
@@ -4090,7 +4155,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v16-layering-fix-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v17-layout-height-centering-2026-06-02">
 </head>
 <body>
 @@HEADER@@
