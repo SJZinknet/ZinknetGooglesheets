@@ -806,42 +806,11 @@ h1{
 }
 
 /* Layout */
-.shell {
-  max-width:1800px;
-  margin-left:clamp(16px, 3vw, 64px);
-  margin-right:auto;
-  padding:16px 20px 26px;
-}
-
-.layout {
-  display:grid;
-  grid-template-columns: minmax(260px,320px) minmax(0,1fr);
-  gap:16px;
-  align-items:stretch;
-}
-
-.search-card{
-  align-self:start;
-}
-
-.catalogue-card{
-  display:flex;
-  flex-direction:column;
-  min-height:calc(100vh - 170px);
-}
+.shell { max-width:1400px; margin:0 auto; padding:16px 20px 26px; }
+.layout { display:grid; grid-template-columns: minmax(260px,320px) minmax(0,1fr); gap:16px; }
 
 @media (max-width: 960px) {
-  .shell {
-    margin-left:0;
-    margin-right:0;
-  }
-
   .layout { grid-template-columns: 1fr; }
-
-  .catalogue-card{
-    height:auto !important;
-    min-height:0;
-  }
 }
 
 .card {
@@ -1270,9 +1239,7 @@ details.filter-section[open] .section-arrow{
 }
 
 .entries {
-  flex:1 1 auto;
-  min-height:0;
-  max-height:none;
+  max-height: calc(100vh - 170px);
   overflow:auto;
   padding-right:4px;
 }
@@ -1777,6 +1744,86 @@ dd.meta-value {
   display:flex;
   flex-wrap:wrap;
   gap:4px;
+}
+
+/* =========================
+   Index page — v18 application layout
+   Desktop only. Detail pages and mobile layout keep the normal document flow.
+   ========================= */
+@media (min-width: 961px){
+  body.index-page{
+    overflow:hidden;
+  }
+
+  body.index-page .shell{
+    max-width:1800px;
+    height:calc(100vh - var(--index-header-height, 104px));
+    min-height:560px;
+    margin-left:clamp(16px, 3vw, 64px);
+    margin-right:clamp(16px, 3vw, 64px);
+    padding:14px 0 16px;
+  }
+
+  body.index-page .layout{
+    height:100%;
+    min-height:0;
+    grid-template-columns:minmax(280px,340px) minmax(0,1fr);
+    align-items:stretch;
+  }
+
+  body.index-page .search-card,
+  body.index-page .catalogue-card{
+    height:100%;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+  }
+
+  body.index-page .search-card{
+    overflow:visible;
+  }
+
+  body.index-page .filters{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:visible;
+    padding-right:4px;
+    margin-right:-4px;
+    overscroll-behavior:contain;
+  }
+
+  body.index-page .catalogue-head,
+  body.index-page #resultCount,
+  body.index-page #orgFilterBadge{
+    flex:0 0 auto;
+  }
+
+  body.index-page .entries{
+    flex:1 1 auto;
+    min-height:0;
+    max-height:none;
+    overflow:auto;
+    overscroll-behavior:contain;
+  }
+
+  /* In app layout the filter column is scrollable. Floating menus therefore
+     switch to fixed positioning so that Bibliography and suggestions are not
+     clipped by the scroll container. They remain below the sticky header. */
+  body.index-page .wide-dropdown-menu.is-fixed-menu,
+  body.index-page .composer-list.is-fixed-menu,
+  body.index-page .instr-list.is-fixed-menu,
+  body.index-page .library-list.is-fixed-menu{
+    position:fixed;
+    right:auto;
+    bottom:auto;
+    z-index:900;
+    max-width:calc(100vw - 24px);
+  }
+
+  body.index-page .wide-dropdown-menu.is-fixed-menu{
+    width:min(760px, calc(100vw - 24px));
+  }
 }
 
 /* Detail pages */
@@ -2461,9 +2508,9 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v17-layout-height-centering-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v18-app-layout-2026-06-02">
 </head>
-<body>
+<body class="index-page">
 @@HEADER@@
 <main class="shell">
   <div class="layout">
@@ -2689,7 +2736,7 @@ index_template = """<!doctype html>
       </div>
     </section>
 
-    <section class="card catalogue-card" id="catalogueCard">
+    <section class="card catalogue-card">
       <div class="catalogue-head">
         <h2>Catalogue</h2>
         <div class="catalogue-sort">
@@ -2744,8 +2791,6 @@ index_template = """<!doctype html>
   const sortBy = document.getElementById('sortBy');
 
   const entriesContainer = document.getElementById('entries');
-  const catalogueCard = document.getElementById('catalogueCard');
-  const searchCard = document.querySelector('.search-card');
   const cards = Array.from(entriesContainer.querySelectorAll('.entry'));
   const noResults = document.getElementById('noResults');
 
@@ -2756,29 +2801,6 @@ index_template = """<!doctype html>
   resultCount.style.color = 'var(--muted)';
   resultCount.style.fontWeight = '600';
   entriesContainer.insertAdjacentElement('beforebegin', resultCount);
-
-  function syncCatalogueHeight(){
-    if(!catalogueCard || !searchCard) return;
-
-    if(window.innerWidth <= 960){
-      catalogueCard.style.height = '';
-      return;
-    }
-
-    const header = document.querySelector('header.app-header');
-    const headerH = header ? header.offsetHeight : 0;
-    const viewportTarget = Math.max(520, window.innerHeight - headerH - 42);
-
-    // The catalogue card follows the full open-filter column height,
-    // while keeping a useful viewport-based minimum when few filters are open.
-    const filterTarget = searchCard.offsetHeight || 0;
-    const target = Math.max(filterTarget, viewportTarget);
-    catalogueCard.style.height = `${target}px`;
-  }
-
-  function scheduleCatalogueHeightSync(){
-    window.requestAnimationFrame(syncCatalogueHeight);
-  }
 
   function countVisibleSubpieces(card) {
     const lines = Array.from(card.querySelectorAll('.subpiece-line[data-pid]'));
@@ -2937,6 +2959,100 @@ index_template = """<!doctype html>
     if(!anyFloatingMenuOpen()) clearDropdownActiveSections();
   }
 
+  // ============ Desktop app-layout measurements + fixed floating menus
+  const appHeader = document.querySelector('header.app-header');
+  const appFilters = document.querySelector('.search-card .filters');
+  const appLayoutMedia = window.matchMedia('(min-width: 961px)');
+
+  function updateIndexAppMetrics(){
+    if(!document.body.classList.contains('index-page')) return;
+    const h = appHeader ? Math.ceil(appHeader.getBoundingClientRect().height) : 104;
+    document.documentElement.style.setProperty('--index-header-height', `${h}px`);
+  }
+
+  function useFixedMenus(){
+    return document.body.classList.contains('index-page') && appLayoutMedia.matches;
+  }
+
+  function clearFixedMenu(menuEl){
+    if(!menuEl) return;
+    menuEl.classList.remove('is-fixed-menu');
+    menuEl.style.left = '';
+    menuEl.style.top = '';
+    menuEl.style.width = '';
+    menuEl.style.maxHeight = '';
+  }
+
+  function resetAllFixedMenus(){
+    [composerList, instrList, bibMenu, libraryList].forEach(clearFixedMenu);
+  }
+
+  function placeFixedMenu(menuEl, anchorEl, opts={}){
+    if(!menuEl || !anchorEl) return;
+    if(!useFixedMenus()){
+      clearFixedMenu(menuEl);
+      return;
+    }
+
+    const margin = 12;
+    const rect = anchorEl.getBoundingClientRect();
+    const headerBottom = appHeader ? appHeader.getBoundingClientRect().bottom : 0;
+    const offsetY = opts.offsetY ?? 5;
+    const naturalMaxHeight = opts.maxHeight ?? (opts.wide ? 360 : 260);
+
+    let top = Math.max(rect.bottom + offsetY, headerBottom + 6);
+    let availableHeight = window.innerHeight - top - margin;
+    if(availableHeight < 140){
+      top = headerBottom + 6;
+      availableHeight = window.innerHeight - top - margin;
+    }
+    const maxHeight = Math.max(140, Math.min(naturalMaxHeight, availableHeight));
+
+    let width;
+    if(opts.wide){
+      width = Math.min(760, window.innerWidth - margin * 2);
+    } else {
+      const minWidth = opts.minWidth ?? 180;
+      width = Math.min(Math.max(rect.width, minWidth), window.innerWidth - margin * 2);
+    }
+
+    let left = rect.left;
+    if(left + width > window.innerWidth - margin) left = window.innerWidth - margin - width;
+    if(left < margin) left = margin;
+
+    menuEl.classList.add('is-fixed-menu');
+    menuEl.style.left = `${Math.round(left)}px`;
+    menuEl.style.top = `${Math.round(top)}px`;
+    menuEl.style.width = `${Math.round(width)}px`;
+    menuEl.style.maxHeight = `${Math.round(maxHeight)}px`;
+  }
+
+  function placeOpenFixedMenus(){
+    updateIndexAppMetrics();
+    if(composerMenu && composerMenu.style.display === 'block'){
+      placeFixedMenu(composerList, composerInput, {maxHeight:240});
+    }
+    if(instrMenu && instrMenu.style.display === 'block'){
+      placeFixedMenu(instrList, instrInput, {maxHeight:280});
+    }
+    if(bibMenu && bibMenu.style.display === 'block'){
+      placeFixedMenu(bibMenu, bibToggle, {wide:true, maxHeight:360});
+    }
+    if(libraryMenu && libraryMenu.style.display === 'block'){
+      placeFixedMenu(libraryList, libraryInput, {maxHeight:260});
+    }
+  }
+
+  updateIndexAppMetrics();
+  window.addEventListener('resize', placeOpenFixedMenus);
+  window.addEventListener('scroll', placeOpenFixedMenus, {passive:true});
+  if(appFilters){
+    appFilters.addEventListener('scroll', placeOpenFixedMenus, {passive:true});
+  }
+  if(appLayoutMedia.addEventListener){
+    appLayoutMedia.addEventListener('change', placeOpenFixedMenus);
+  }
+
   function closeAllFloatingMenus(except){
     if(except !== 'composer'){
       composerMenu.style.display = 'none';
@@ -2953,6 +3069,7 @@ index_template = """<!doctype html>
       libraryMenu.style.display = 'none';
       libraryList.innerHTML = '';
     }
+    resetAllFixedMenus();
     clearDropdownActiveSections();
   }
 
@@ -2967,6 +3084,7 @@ index_template = """<!doctype html>
   function closeComposerMenu(){
     composerMenu.style.display = 'none';
     composerList.innerHTML = '';
+    clearFixedMenu(composerList);
     clearDropdownActiveIfNoneOpen();
   }
 
@@ -2986,8 +3104,13 @@ index_template = """<!doctype html>
       composerList.appendChild(div);
     });
     composerMenu.style.display = items.length ? 'block' : 'none';
-    if(items.length) activateDropdownSection(composerMenu);
-    else clearDropdownActiveIfNoneOpen();
+    if(items.length){
+      activateDropdownSection(composerMenu);
+      placeFixedMenu(composerList, composerInput, {maxHeight:240});
+    } else {
+      clearFixedMenu(composerList);
+      clearDropdownActiveIfNoneOpen();
+    }
   }
 
   function computeComposerHits(){
@@ -3046,6 +3169,7 @@ index_template = """<!doctype html>
     if(!instrMenu) return;
     instrMenu.style.display = 'none';
     instrList.innerHTML = '';
+    clearFixedMenu(instrList);
     clearDropdownActiveIfNoneOpen();
   }
 
@@ -3088,8 +3212,13 @@ index_template = """<!doctype html>
       instrList.appendChild(div);
     });
     instrMenu.style.display = items.length ? 'block' : 'none';
-    if(items.length) activateDropdownSection(instrMenu);
-    else clearDropdownActiveIfNoneOpen();
+    if(items.length){
+      activateDropdownSection(instrMenu);
+      placeFixedMenu(instrList, instrInput, {maxHeight:280});
+    } else {
+      clearFixedMenu(instrList);
+      clearDropdownActiveIfNoneOpen();
+    }
   }
 
   function renderStRules(){
@@ -3149,6 +3278,7 @@ index_template = """<!doctype html>
 
   function closeBibMenu(){
     bibMenu.style.display = 'none';
+    clearFixedMenu(bibMenu);
     clearDropdownActiveIfNoneOpen();
   }
 
@@ -3156,6 +3286,7 @@ index_template = """<!doctype html>
     closeAllFloatingMenus('bib');
     bibMenu.style.display = 'block';
     activateDropdownSection(bibMenu);
+    placeFixedMenu(bibMenu, bibToggle, {wide:true, maxHeight:360});
   }
 
   function toggleBibMenu(){
@@ -3232,6 +3363,7 @@ index_template = """<!doctype html>
   function closeLibraryMenu(){
     libraryMenu.style.display = 'none';
     libraryList.innerHTML = '';
+    clearFixedMenu(libraryList);
     clearDropdownActiveIfNoneOpen();
   }
 
@@ -3255,8 +3387,13 @@ index_template = """<!doctype html>
       libraryList.appendChild(div);
     });
     libraryMenu.style.display = items.length ? 'block' : 'none';
-    if(items.length) activateDropdownSection(libraryMenu);
-    else clearDropdownActiveIfNoneOpen();
+    if(items.length){
+      activateDropdownSection(libraryMenu);
+      placeFixedMenu(libraryList, libraryInput, {maxHeight:260});
+    } else {
+      clearFixedMenu(libraryList);
+      clearDropdownActiveIfNoneOpen();
+    }
   }
 
   function computeLibraryHits(){
@@ -3744,11 +3881,6 @@ index_template = """<!doctype html>
 
   updateMsDetailVisibility();
 
-  document.querySelectorAll('details.filter-section').forEach(section => {
-    section.addEventListener('toggle', scheduleCatalogueHeightSync);
-  });
-  window.addEventListener('resize', scheduleCatalogueHeightSync);
-
   // ============ Main filter
   function applyFilters() {
     const q  = normalize(searchInput.value);
@@ -3862,7 +3994,6 @@ index_template = """<!doctype html>
 
     noResults.style.display = visible ? 'none' : '';
     updateResultCount(visible, matchingPieces, pieceLevelActive);
-    scheduleCatalogueHeightSync();
   }
 
   // ============ Listeners
@@ -3887,6 +4018,12 @@ index_template = """<!doctype html>
   msDetailFilter.addEventListener('change', applyFilters);
   rismNoInput.addEventListener('input', applyFilters);
 
+  document.addEventListener('keydown', (ev) => {
+    if(ev.key === 'Escape'){
+      closeAllFloatingMenus();
+    }
+  });
+
   document.addEventListener('click', (ev) => {
     if(!composerMenu.contains(ev.target) && ev.target !== composerInput){
       closeComposerMenu();
@@ -3905,7 +4042,6 @@ index_template = """<!doctype html>
 
   applySort();
   applyFilters();
-  scheduleCatalogueHeightSync();
 </script>
 </body>
 </html>
@@ -4155,7 +4291,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v17-layout-height-centering-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v18-app-layout-2026-06-02">
 </head>
 <body>
 @@HEADER@@
