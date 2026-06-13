@@ -805,6 +805,69 @@ h1{
   }
 }
 
+
+/* Responsive header variants */
+@media (min-width:700px) and (max-width:1049px){
+  header.app-header{
+    padding:8px 16px 7px;
+  }
+
+  .header-grid{
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:12px;
+  }
+
+  .meta-line,
+  .partner-text{
+    display:none;
+  }
+
+  h1{
+    font-size:1.7rem;
+  }
+
+  .tagline{
+    font-size:.82rem;
+    margin-top:1px;
+  }
+
+  .hem-logo{ height:42px; }
+  .rism-logo{ height:22px; }
+}
+
+@media (max-width:699px){
+  header.app-header{
+    padding:6px 12px 5px;
+  }
+
+  .header-grid{
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:8px;
+  }
+
+  .meta-line,
+  .partner-text,
+  .tagline{
+    display:none;
+  }
+
+  h1{
+    font-size:1.42rem;
+    line-height:1.0;
+  }
+
+  .right{
+    gap:6px;
+  }
+
+  .logo-column{
+    gap:4px;
+  }
+
+  .hem-logo{ height:32px; }
+  .rism-logo{ height:18px; }
+}
+
 /* Layout */
 .shell { max-width:1400px; margin:0 auto; padding:16px 20px 26px; }
 .layout { display:grid; grid-template-columns: minmax(260px,320px) minmax(0,1fr); gap:16px; }
@@ -1750,7 +1813,7 @@ dd.meta-value {
    Index page — v18 application layout
    Desktop only. Detail pages and mobile layout keep the normal document flow.
    ========================= */
-@media (min-width: 961px){
+@media (min-width: 1050px){
   body.index-page{
     overflow:hidden;
   }
@@ -2508,7 +2571,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v18-app-layout-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v19-responsive-header-2026-06-02">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -2962,7 +3025,7 @@ index_template = """<!doctype html>
   // ============ Desktop app-layout measurements + fixed floating menus
   const appHeader = document.querySelector('header.app-header');
   const appFilters = document.querySelector('.search-card .filters');
-  const appLayoutMedia = window.matchMedia('(min-width: 961px)');
+  const appLayoutMedia = window.matchMedia('(min-width: 1050px)');
 
   function updateIndexAppMetrics(){
     if(!document.body.classList.contains('index-page')) return;
@@ -4291,7 +4354,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v18-app-layout-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v19-responsive-header-2026-06-02">
 </head>
 <body>
 @@HEADER@@
