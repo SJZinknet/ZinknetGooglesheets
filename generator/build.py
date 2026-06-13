@@ -19,6 +19,7 @@
 #   holdings/libraries, and RISM number.
 # - RISM edition information for prints: Publisher / Printer + Publication Place.
 # - v15 display fix: dropdown layering + instrumentation simple-search suggestions.
+# - v20 responsive cleanup: compact centered header + mobile Search Tool layout.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -806,66 +807,281 @@ h1{
 }
 
 
-/* Responsive header variants */
-@media (min-width:700px) and (max-width:1049px){
+/* Header — compact tablet/mobile variants.
+   The full project metadata is useful on desktop, but too tall on smaller screens. */
+@media (max-width: 980px){
   header.app-header{
-    padding:8px 16px 7px;
+    padding:7px 12px 6px;
   }
 
   .header-grid{
     grid-template-columns:minmax(0,1fr) auto;
-    gap:12px;
+    align-items:center;
+    gap:10px;
   }
 
-  .meta-line,
+  .header-grid .left{
+    min-width:0;
+  }
+
+  h1{
+    font-size:1.55rem;
+  }
+
+  .tagline{
+    margin-top:1px;
+    font-size:.82rem;
+    line-height:1.15;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .meta-line{
+    display:none;
+  }
+
+  .right{
+    min-width:auto;
+    align-items:center;
+    justify-content:flex-end;
+    gap:0;
+    padding-top:0;
+  }
+
   .partner-text{
     display:none;
   }
 
+  .logo-column{
+    flex-direction:row;
+    align-items:center;
+    gap:7px;
+  }
+
+  .hem-logo{
+    height:42px;
+  }
+
+  .rism-logo{
+    height:22px;
+  }
+
+  .logo-fallback{
+    padding:4px 8px;
+    font-size:.74rem;
+  }
+
+  .logo-fallback--small{
+    padding:3px 7px;
+    font-size:.70rem;
+  }
+}
+
+@media (max-width: 700px){
+  header.app-header{
+    padding:6px 10px 5px;
+  }
+
   h1{
-    font-size:1.7rem;
+    font-size:1.36rem;
   }
 
   .tagline{
-    font-size:.82rem;
-    margin-top:1px;
+    font-size:.75rem;
   }
 
-  .hem-logo{ height:42px; }
-  .rism-logo{ height:22px; }
+  .hem-logo{
+    height:34px;
+  }
+
+  .rism-logo{
+    height:20px;
+  }
+
+  .logo-column{
+    gap:6px;
+  }
 }
 
-@media (max-width:699px){
-  header.app-header{
-    padding:6px 12px 5px;
+@media (max-width: 480px){
+  h1{
+    font-size:1.30rem;
   }
 
-  .header-grid{
-    grid-template-columns:minmax(0,1fr) auto;
-    gap:8px;
-  }
-
-  .meta-line,
-  .partner-text,
   .tagline{
     display:none;
   }
 
-  h1{
-    font-size:1.42rem;
-    line-height:1.0;
+  .hem-logo{
+    height:30px;
   }
 
-  .right{
-    gap:6px;
+  .rism-logo{
+    height:18px;
   }
 
   .logo-column{
-    gap:4px;
+    gap:5px;
+  }
+}
+
+
+/* Header — v20 vertical centering refinements */
+@media (max-width: 980px){
+  .header-grid{
+    align-items:center;
   }
 
-  .hem-logo{ height:32px; }
-  .rism-logo{ height:18px; }
+  .header-grid .left{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+
+  .right{
+    align-self:center;
+    align-items:center;
+  }
+
+  .logo-column,
+  .hem-slot,
+  .rism-slot{
+    align-items:center;
+    justify-content:center;
+  }
+}
+
+@media (max-width: 700px){
+  header.app-header{
+    min-height:46px;
+  }
+
+  .header-grid{
+    align-items:center;
+  }
+
+  h1{
+    display:flex;
+    align-items:center;
+  }
+
+  .right{
+    min-height:36px;
+  }
+}
+
+@media (max-width: 480px){
+  header.app-header{
+    min-height:42px;
+  }
+
+  .right{
+    min-height:32px;
+  }
+}
+
+/* Mobile Search Tool — more accessible controls */
+@media (max-width: 700px){
+  body.index-page .search-tool-field{
+    border:1px solid rgba(208,213,235,0.85);
+    background:linear-gradient(180deg,#ffffff,#fbfcff);
+    border-radius:14px;
+    padding:10px;
+  }
+
+  body.index-page .search-tool-controls{
+    display:grid !important;
+    grid-template-columns:1.2fr .75fr .75fr;
+    gap:8px !important;
+    align-items:stretch;
+  }
+
+  body.index-page .search-tool-controls select,
+  body.index-page .search-tool-controls button{
+    width:100%;
+    min-width:0;
+    min-height:38px;
+    border-radius:12px;
+    font-size:.86rem;
+  }
+
+  body.index-page .search-tool-controls #stMode{
+    grid-column:1;
+  }
+
+  body.index-page .search-tool-controls #stCmp{
+    grid-column:2;
+  }
+
+  body.index-page .search-tool-controls #stQty{
+    grid-column:3;
+  }
+
+  body.index-page .search-tool-controls #stInstr{
+    grid-column:1 / -1;
+  }
+
+  body.index-page .search-tool-controls #stAdd{
+    grid-column:1 / 3;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:700;
+  }
+
+  body.index-page .search-tool-controls #stClear{
+    grid-column:3;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  body.index-page #stActive{
+    margin-top:9px !important;
+    gap:7px !important;
+  }
+
+  body.index-page #stActive .tag{
+    padding:5px 9px;
+    font-size:.76rem;
+    border-radius:999px;
+  }
+
+  body.index-page .search-tool-hint{
+    margin-top:7px;
+  }
+}
+
+@media (max-width: 480px){
+  body.index-page .search-tool-controls{
+    grid-template-columns:1fr 1fr;
+  }
+
+  body.index-page .search-tool-controls #stMode{
+    grid-column:1;
+  }
+
+  body.index-page .search-tool-controls #stCmp{
+    grid-column:2;
+  }
+
+  body.index-page .search-tool-controls #stInstr{
+    grid-column:1 / -1;
+  }
+
+  body.index-page .search-tool-controls #stQty{
+    grid-column:1;
+  }
+
+  body.index-page .search-tool-controls #stAdd{
+    grid-column:2;
+  }
+
+  body.index-page .search-tool-controls #stClear{
+    grid-column:1 / -1;
+  }
 }
 
 /* Layout */
@@ -1809,11 +2025,79 @@ dd.meta-value {
   gap:4px;
 }
 
+
+/* Index page — tablet/mobile normal flow.
+   Below the desktop-app breakpoint, avoid nested column scrolls and let the page scroll naturally. */
+@media (max-width: 1099px){
+  body.index-page{
+    overflow:auto;
+  }
+
+  body.index-page .shell{
+    max-width:none;
+    margin:0;
+    padding:12px 14px 22px;
+  }
+
+  body.index-page .layout{
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+
+  body.index-page .search-card,
+  body.index-page .catalogue-card{
+    height:auto;
+    min-height:0;
+    display:block;
+  }
+
+  body.index-page .filters{
+    overflow:visible;
+    padding-right:0;
+    margin-right:0;
+  }
+
+  body.index-page .entries{
+    max-height:none;
+    overflow:visible;
+    padding-right:0;
+  }
+}
+
+@media (max-width: 700px){
+  body.index-page .shell{
+    padding:10px 10px 18px;
+  }
+
+  .card{
+    border-radius:16px;
+    padding:12px;
+  }
+
+  .search-card-header{
+    align-items:center;
+  }
+
+  .clear-top-btn{
+    padding:4px 8px !important;
+  }
+
+  .catalogue-head{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .catalogue-sort{
+    width:100%;
+    justify-content:flex-start;
+  }
+}
+
 /* =========================
-   Index page — v18 application layout
-   Desktop only. Detail pages and mobile layout keep the normal document flow.
+   Index page — v20 responsive layout
+   App layout remains desktop-only. Tablet/mobile return to normal page flow.
    ========================= */
-@media (min-width: 1050px){
+@media (min-width: 1100px){
   body.index-page{
     overflow:hidden;
   }
@@ -2571,7 +2855,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v19-responsive-header-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v20-responsive-cleanup-2026-06-02">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -2641,7 +2925,7 @@ index_template = """<!doctype html>
             <summary>
               <div class="section-title">
                 <strong>Instrumentation</strong>
-                <span>Simple search and advanced count rules</span>
+                <span>Simple search and Search Tool rules</span>
               </div>
               <div class="section-arrow">›</div>
             </summary>
@@ -2656,9 +2940,9 @@ index_template = """<!doctype html>
                 <div class="field-hint">Start typing, then select a suggestion or keep a free text search.</div>
               </div>
 
-              <div class="filter-field">
-                <label>Advanced search</label>
-                <div class="filter-inline" style="gap:6px;">
+              <div class="filter-field search-tool-field">
+                <label>Search Tool</label>
+                <div class="filter-inline search-tool-controls" style="gap:6px;">
                   <select id="stMode">
                     <option value="include">Include</option>
                     <option value="exclude">Exclude</option>
@@ -2690,6 +2974,7 @@ index_template = """<!doctype html>
                   <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
                 </div>
                 <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+                <div class="field-hint search-tool-hint">Build include/exclude rules with instrument counts.</div>
               </div>
             </div>
           </details>
@@ -3025,7 +3310,7 @@ index_template = """<!doctype html>
   // ============ Desktop app-layout measurements + fixed floating menus
   const appHeader = document.querySelector('header.app-header');
   const appFilters = document.querySelector('.search-card .filters');
-  const appLayoutMedia = window.matchMedia('(min-width: 1050px)');
+  const appLayoutMedia = window.matchMedia('(min-width: 1100px)');
 
   function updateIndexAppMetrics(){
     if(!document.body.classList.contains('index-page')) return;
@@ -4354,7 +4639,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v19-responsive-header-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v20-responsive-cleanup-2026-06-02">
 </head>
 <body>
 @@HEADER@@
