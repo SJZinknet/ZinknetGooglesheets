@@ -20,6 +20,7 @@
 # - RISM edition information for prints: Publisher / Printer + Publication Place.
 # - v15 display fix: dropdown layering + instrumentation simple-search suggestions.
 # - v20 responsive cleanup: compact centered header + mobile Search Tool layout.
+# - v21 mobile filter panel: hamburger in header opens filters under sticky header.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -626,7 +627,12 @@ def build_header_html():
 <header class="app-header">
   <div class="header-grid">
     <div class="left">
-      <h1>ZinkNET</h1>
+      <div class="brand-row">
+        <button id="mobileFilterToggle" class="mobile-filter-toggle" type="button" aria-label="Open filters" aria-controls="mobileFilterPanel" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <h1>ZinkNET</h1>
+      </div>
       <div class="tagline">Interactive catalogue for the Cornett Repertoire</div>
       <div class="meta-line">
         <strong>Project director:</strong> Lambert Colson · <strong>Research assistants:</strong> Tim Meulenbeld, Sushaant Jaccard
@@ -926,6 +932,72 @@ h1{
   }
 }
 
+
+
+/* Mobile filter trigger.
+   Hidden with display:none by default, so it occupies no space on desktop
+   and on detail pages. */
+.brand-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+
+.mobile-filter-toggle{
+  display:none;
+  width:34px;
+  height:34px;
+  flex:0 0 auto;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:4px;
+  border:1px solid var(--border-subtle);
+  border-radius:999px;
+  background:#ffffff;
+  color:#111827;
+  box-shadow:0 6px 16px rgba(15,23,42,0.07);
+  cursor:pointer;
+  padding:0;
+}
+
+.mobile-filter-toggle span{
+  display:block;
+  width:15px;
+  height:2px;
+  border-radius:999px;
+  background:#111827;
+}
+
+.mobile-filter-toggle:hover{
+  border-color:var(--border-strong);
+  background:#fafaff;
+}
+
+.mobile-filter-close{
+  display:none;
+  width:32px;
+  height:32px;
+  flex:0 0 auto;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  border:1px solid var(--border-subtle);
+  background:#ffffff;
+  color:#374151;
+  font-size:1.3rem;
+  line-height:1;
+  cursor:pointer;
+}
+
+.search-card-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex:0 0 auto;
+}
 
 /* Header — v20 vertical centering refinements */
 @media (max-width: 980px){
@@ -2093,8 +2165,100 @@ dd.meta-value {
   }
 }
 
+
+/* Mobile filter panel — variant B:
+   full-width panel below the sticky header, opened from the header hamburger. */
+@media (max-width: 700px){
+  body.index-page .mobile-filter-toggle{
+    display:inline-flex;
+  }
+
+  body.index-page .header-grid .left{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
+  body.index-page .brand-row{
+    align-items:center;
+  }
+
+  body.index-page .search-card{
+    display:none;
+    position:fixed;
+    left:0;
+    right:0;
+    top:var(--index-header-height, 52px);
+    bottom:0;
+    z-index:950;
+    border-radius:0;
+    border-left:none;
+    border-right:none;
+    border-bottom:none;
+    padding:12px;
+    overflow:hidden;
+    flex-direction:column;
+    box-shadow:0 22px 50px rgba(15,23,42,0.22);
+  }
+
+  body.index-page.filters-open{
+    overflow:hidden;
+  }
+
+  body.index-page.filters-open .search-card{
+    display:flex;
+  }
+
+  body.index-page .search-card-header{
+    flex:0 0 auto;
+    border-bottom:1px solid rgba(208,213,235,0.72);
+    padding-bottom:10px;
+    margin-bottom:10px;
+  }
+
+  body.index-page .search-card-actions{
+    margin-left:auto;
+  }
+
+  body.index-page .mobile-filter-close{
+    display:inline-flex;
+  }
+
+  body.index-page .filters{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:visible;
+    padding-right:2px;
+    padding-bottom:18px;
+    overscroll-behavior:contain;
+  }
+
+  body.index-page .layout{
+    display:block;
+  }
+
+  body.index-page .catalogue-card{
+    display:block;
+  }
+}
+
+@media (max-width: 480px){
+  body.index-page .mobile-filter-toggle{
+    width:32px;
+    height:32px;
+  }
+
+  body.index-page .mobile-filter-toggle span{
+    width:14px;
+  }
+
+  body.index-page .search-card{
+    padding:10px;
+  }
+}
+
 /* =========================
-   Index page — v20 responsive layout
+   Index page — v21 responsive layout
    App layout remains desktop-only. Tablet/mobile return to normal page flow.
    ========================= */
 @media (min-width: 1100px){
@@ -2855,18 +3019,21 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v20-responsive-cleanup-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v21-mobile-filter-panel-2026-06-02">
 </head>
 <body class="index-page">
 @@HEADER@@
 <main class="shell">
   <div class="layout">
-    <section class="card search-card">
+    <section id="mobileFilterPanel" class="card search-card" aria-label="Search and filters">
       <div class="card-header search-card-header">
         <h2>Search & filters</h2>
-        <button id="clearAllFilters" type="button" class="tag clear-top-btn">
-          Clear all filters
-        </button>
+        <div class="search-card-actions">
+          <button id="clearAllFilters" type="button" class="tag clear-top-btn">
+            Clear all filters
+          </button>
+          <button id="mobileFilterClose" type="button" class="mobile-filter-close" aria-label="Close filters">×</button>
+        </div>
       </div>
 
       <div class="filters">
@@ -3122,6 +3289,9 @@ index_template = """<!doctype html>
   const msDetailBlock = document.getElementById('msDetailBlock');
   const msDetailFilter = document.getElementById('msDetailFilter');
   const clearAllFilters = document.getElementById('clearAllFilters');
+  const mobileFilterToggle = document.getElementById('mobileFilterToggle');
+  const mobileFilterClose = document.getElementById('mobileFilterClose');
+  const mobileFilterMedia = window.matchMedia('(max-width: 700px)');
 
   const bibToggle = document.getElementById('bibToggle');
   const bibMenu = document.getElementById('bibMenu');
@@ -3318,6 +3488,28 @@ index_template = """<!doctype html>
     document.documentElement.style.setProperty('--index-header-height', `${h}px`);
   }
 
+  function setMobileFilterPanel(open){
+    if(!document.body.classList.contains('index-page')) return;
+
+    const shouldOpen = !!open && mobileFilterMedia.matches;
+    document.body.classList.toggle('filters-open', shouldOpen);
+
+    if(mobileFilterToggle){
+      mobileFilterToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+      mobileFilterToggle.setAttribute('aria-label', shouldOpen ? 'Close filters' : 'Open filters');
+    }
+
+    if(!shouldOpen){
+      closeAllFloatingMenus();
+    } else {
+      updateIndexAppMetrics();
+    }
+  }
+
+  function toggleMobileFilterPanel(){
+    setMobileFilterPanel(!document.body.classList.contains('filters-open'));
+  }
+
   function useFixedMenus(){
     return document.body.classList.contains('index-page') && appLayoutMedia.matches;
   }
@@ -3399,6 +3591,19 @@ index_template = """<!doctype html>
   }
   if(appLayoutMedia.addEventListener){
     appLayoutMedia.addEventListener('change', placeOpenFixedMenus);
+  }
+
+  if(mobileFilterToggle){
+    mobileFilterToggle.addEventListener('click', toggleMobileFilterPanel);
+  }
+  if(mobileFilterClose){
+    mobileFilterClose.addEventListener('click', () => setMobileFilterPanel(false));
+  }
+  if(mobileFilterMedia.addEventListener){
+    mobileFilterMedia.addEventListener('change', (ev) => {
+      if(!ev.matches) setMobileFilterPanel(false);
+      updateIndexAppMetrics();
+    });
   }
 
   function closeAllFloatingMenus(except){
@@ -4368,7 +4573,11 @@ index_template = """<!doctype html>
 
   document.addEventListener('keydown', (ev) => {
     if(ev.key === 'Escape'){
-      closeAllFloatingMenus();
+      if(document.body.classList.contains('filters-open')){
+        setMobileFilterPanel(false);
+      } else {
+        closeAllFloatingMenus();
+      }
     }
   });
 
@@ -4639,7 +4848,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v20-responsive-cleanup-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v21-mobile-filter-panel-2026-06-02">
 </head>
 <body>
 @@HEADER@@
