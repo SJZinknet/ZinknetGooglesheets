@@ -21,6 +21,7 @@
 # - v15 display fix: dropdown layering + instrumentation simple-search suggestions.
 # - v20 responsive cleanup: compact centered header + mobile Search Tool layout.
 # - v21 mobile filter panel: hamburger in header opens filters under sticky header.
+# - v22 Organology: dedicated multi-code instrument filter + URL hash support.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -376,6 +377,38 @@ def bibliography_refs(raw):
         if part:
             refs.append(part)
     return unique_preserve_order(refs)
+
+def organology_codes(raw):
+    """
+    Parse the Organology column as a list of instrument codes.
+
+    Recommended Google Sheet syntax:
+      cnto; trb; fag
+
+    Also accepted for convenience:
+      - one code per line
+      - comma-separated codes in simple cases
+
+    Display spelling is preserved for chips/options, while filtering uses
+    case-insensitive keys. The raw Organology cell is still displayed on
+    detail pages as documentary text.
+    """
+    s = clean_str(raw)
+    if not s:
+        return []
+
+    out = []
+    seen = set()
+    for part in re.split(r"[;\r\n,]+", s):
+        code = re.sub(r"\s+", " ", part).strip()
+        code = code.strip("[](){} ")
+        if not code:
+            continue
+        key = code.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(code)
+    return out
 
 def rism_holdings_sigla(raw):
     """
@@ -1339,7 +1372,8 @@ details.filter-section.dropdown-active{
 details.filter-section.dropdown-active .composer-list,
 details.filter-section.dropdown-active .instr-list,
 details.filter-section.dropdown-active .wide-dropdown-menu,
-details.filter-section.dropdown-active .library-list{
+details.filter-section.dropdown-active .library-list,
+details.filter-section.dropdown-active .organology-list{
   z-index:220;
 }
 
@@ -1557,12 +1591,14 @@ details.filter-section[open] .section-arrow{
   color:var(--violet-text);
 }
 
-.library-menu{
+.library-menu,
+.organology-menu{
   display:none;
   position:relative;
 }
 
-.library-menu .library-list{
+.library-menu .library-list,
+.organology-menu .organology-list{
   position:absolute;
   top:4px;
   left:0;
@@ -1577,7 +1613,8 @@ details.filter-section[open] .section-arrow{
   padding:6px;
 }
 
-.library-item{
+.library-item,
+.organology-item{
   padding:7px 10px;
   border-radius:12px;
   cursor:pointer;
@@ -1585,7 +1622,8 @@ details.filter-section[open] .section-arrow{
   color:var(--text);
 }
 
-.library-item:hover{
+.library-item:hover,
+.organology-item:hover{
   background: rgba(35,75,184,0.06);
 }
 
@@ -2258,7 +2296,7 @@ dd.meta-value {
 }
 
 /* =========================
-   Index page — v21 responsive layout
+   Index page — v22 responsive layout
    App layout remains desktop-only. Tablet/mobile return to normal page flow.
    ========================= */
 @media (min-width: 1100px){
@@ -2324,7 +2362,8 @@ dd.meta-value {
   body.index-page .wide-dropdown-menu.is-fixed-menu,
   body.index-page .composer-list.is-fixed-menu,
   body.index-page .instr-list.is-fixed-menu,
-  body.index-page .library-list.is-fixed-menu{
+  body.index-page .library-list.is-fixed-menu,
+  body.index-page .organology-list.is-fixed-menu{
     position:fixed;
     right:auto;
     bottom:auto;
@@ -3019,7 +3058,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v21-mobile-filter-panel-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v22-organology-filter-2026-06-02">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -3142,6 +3181,38 @@ index_template = """<!doctype html>
                 </div>
                 <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
                 <div class="field-hint search-tool-hint">Build include/exclude rules with instrument counts.</div>
+              </div>
+            </div>
+          </details>
+
+          <details class="filter-section">
+            <summary>
+              <div class="section-title">
+                <strong>Organology</strong>
+                <span>Filter by instrument code</span>
+              </div>
+              <div class="section-arrow">›</div>
+            </summary>
+
+            <div class="section-body">
+              <div class="filter-field">
+                <label>Match mode</label>
+                <div class="filter-inline filter-mode-row">
+                  <select id="organologyMatchMode" aria-label="Organology matching mode">
+                    <option value="any">Match any</option>
+                    <option value="all">Match all</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="filter-field" style="position:relative;">
+                <label for="organologyInput">Instrument code</label>
+                <input id="organologyInput" type="text" placeholder="Type an instrument code: cnto, trb, fag…" autocomplete="off" />
+                <div class="organology-menu" id="organologyMenu">
+                  <div class="organology-list" id="organologyList"></div>
+                </div>
+                <div id="organologyActive" class="active-filter-chips"></div>
+                <div class="field-hint">Use semicolons in the Google Sheet for multiple codes, e.g. cnto; trb.</div>
               </div>
             </div>
           </details>
@@ -3304,6 +3375,12 @@ index_template = """<!doctype html>
   const libraryList = document.getElementById('libraryList');
   const libraryActive = document.getElementById('libraryActive');
   const libraryMatchMode = document.getElementById('libraryMatchMode');
+
+  const organologyInput = document.getElementById('organologyInput');
+  const organologyMenu = document.getElementById('organologyMenu');
+  const organologyList = document.getElementById('organologyList');
+  const organologyActive = document.getElementById('organologyActive');
+  const organologyMatchMode = document.getElementById('organologyMatchMode');
 
   const rismNoInput = document.getElementById('rismNoInput');
   const sortBy = document.getElementById('sortBy');
@@ -3469,7 +3546,8 @@ index_template = """<!doctype html>
       (composerMenu && composerMenu.style.display === 'block') ||
       (instrMenu && instrMenu.style.display === 'block') ||
       (bibMenu && bibMenu.style.display === 'block') ||
-      (libraryMenu && libraryMenu.style.display === 'block')
+      (libraryMenu && libraryMenu.style.display === 'block') ||
+      (organologyMenu && organologyMenu.style.display === 'block')
     );
   }
 
@@ -3524,7 +3602,7 @@ index_template = """<!doctype html>
   }
 
   function resetAllFixedMenus(){
-    [composerList, instrList, bibMenu, libraryList].forEach(clearFixedMenu);
+    [composerList, instrList, bibMenu, libraryList, organologyList].forEach(clearFixedMenu);
   }
 
   function placeFixedMenu(menuEl, anchorEl, opts={}){
@@ -3581,6 +3659,9 @@ index_template = """<!doctype html>
     if(libraryMenu && libraryMenu.style.display === 'block'){
       placeFixedMenu(libraryList, libraryInput, {maxHeight:260});
     }
+    if(organologyMenu && organologyMenu.style.display === 'block'){
+      placeFixedMenu(organologyList, organologyInput, {maxHeight:260});
+    }
   }
 
   updateIndexAppMetrics();
@@ -3621,6 +3702,10 @@ index_template = """<!doctype html>
     if(except !== 'library'){
       libraryMenu.style.display = 'none';
       libraryList.innerHTML = '';
+    }
+    if(except !== 'organology' && organologyMenu){
+      organologyMenu.style.display = 'none';
+      organologyList.innerHTML = '';
     }
     resetAllFixedMenus();
     clearDropdownActiveSections();
@@ -4005,13 +4090,129 @@ index_template = """<!doctype html>
 
   libraryMatchMode.addEventListener('change', applyFilters);
 
+  // ============ Organology dedicated multi-select filter
+  const ORGANOLOGY_OPTIONS = @@ORGANOLOGY_OPTIONS@@;
+  const ORGANOLOGY_DISPLAY = new Map(ORGANOLOGY_OPTIONS.map(o => [o.k, o.d]));
+  const selectedOrganology = [];
+
+  function normalizeOrganologyCode(s){
+    return normalizeLoose(s);
+  }
+
+  function closeOrganologyMenu(){
+    if(!organologyMenu) return;
+    organologyMenu.style.display = 'none';
+    organologyList.innerHTML = '';
+    clearFixedMenu(organologyList);
+    clearDropdownActiveIfNoneOpen();
+  }
+
+  function openOrganologyMenu(items){
+    if(!organologyMenu) return;
+    closeAllFloatingMenus('organology');
+    organologyList.innerHTML = '';
+    items.forEach(obj => {
+      const div = document.createElement('div');
+      div.className = 'organology-item';
+      div.textContent = obj.d;
+      div.title = obj.d;
+      div.addEventListener('click', () => {
+        if(!selectedOrganology.includes(obj.k)){
+          selectedOrganology.push(obj.k);
+        }
+        organologyInput.value = '';
+        closeOrganologyMenu();
+        renderOrganologyChips();
+        updateOrgFilterBadge();
+        applyFilters();
+      });
+      organologyList.appendChild(div);
+    });
+    organologyMenu.style.display = items.length ? 'block' : 'none';
+    if(items.length){
+      activateDropdownSection(organologyMenu);
+      placeFixedMenu(organologyList, organologyInput, {maxHeight:260});
+    } else {
+      clearFixedMenu(organologyList);
+      clearDropdownActiveIfNoneOpen();
+    }
+  }
+
+  function computeOrganologyHits(){
+    const q = normalizeOrganologyCode(organologyInput.value);
+    if(!q) return [];
+    const hits = [];
+    for(const obj of ORGANOLOGY_OPTIONS){
+      const display = normalizeOrganologyCode(obj.d);
+      const key = normalizeOrganologyCode(obj.k);
+      if(display.includes(q) || key.includes(q)){
+        hits.push(obj);
+        if(hits.length >= 40) break;
+      }
+    }
+    return hits;
+  }
+
+  function renderOrganologyChips(){
+    organologyActive.innerHTML = '';
+    selectedOrganology.forEach(k => {
+      const display = ORGANOLOGY_DISPLAY.get(k) || k;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'active-filter-chip';
+      chip.title = `Click to remove: ${display}`;
+
+      const text = document.createElement('span');
+      text.className = 'chip-text';
+      text.textContent = display;
+
+      const x = document.createElement('span');
+      x.textContent = '×';
+
+      chip.appendChild(text);
+      chip.appendChild(x);
+      chip.addEventListener('click', () => {
+        const idx = selectedOrganology.indexOf(k);
+        if(idx >= 0) selectedOrganology.splice(idx, 1);
+        renderOrganologyChips();
+        updateOrgFilterBadge();
+        applyFilters();
+      });
+      organologyActive.appendChild(chip);
+    });
+  }
+
+  function setOrganologySelection(keys){
+    selectedOrganology.length = 0;
+    (keys || []).forEach(k => {
+      const key = normalizeOrganologyCode(k);
+      if(key && !selectedOrganology.includes(key)) selectedOrganology.push(key);
+    });
+    renderOrganologyChips();
+  }
+
+  organologyInput.addEventListener('input', () => {
+    const hits = computeOrganologyHits();
+    if(!hits.length) closeOrganologyMenu();
+    else openOrganologyMenu(hits);
+  });
+
+  organologyInput.addEventListener('focus', () => {
+    const hits = computeOrganologyHits();
+    if(hits.length) openOrganologyMenu(hits);
+  });
+
+  organologyMatchMode.addEventListener('change', applyFilters);
+
   // ============ Organology link filter
   // Supported URL fragments:
   //   index.html#org=IDENTIFIER
   //   index.html#organology=IDENTIFIER
+  //   index.html#org=cnto,trb
+  //   index.html#org=cnto;trb
   //
-  // This works because the Organology column is already included
-  // in data-search / Global search.
+  // This now activates the dedicated Organology filter instead of filling
+  // the global Search all field.
   const orgFilterBadge = document.createElement('div');
   orgFilterBadge.id = 'orgFilterBadge';
   orgFilterBadge.style.display = 'none';
@@ -4023,12 +4224,21 @@ index_template = """<!doctype html>
 
   entriesContainer.insertAdjacentElement('beforebegin', orgFilterBadge);
 
+  function parseOrganologyHashCodes(value){
+    const raw = value || '';
+    return raw
+      .split(/[;,]+/)
+      .map(v => normalizeOrganologyCode(v))
+      .filter(Boolean);
+  }
+
   function readOrgFilterFromHash() {
     const raw = (window.location.hash || '').replace(/^#/, '');
-    if (!raw) return '';
+    if (!raw) return [];
 
     const params = new URLSearchParams(raw);
-    return params.get('org') || params.get('organology') || '';
+    const value = params.get('org') || params.get('organology') || '';
+    return parseOrganologyHashCodes(value);
   }
 
   function clearOrgHash() {
@@ -4037,27 +4247,33 @@ index_template = """<!doctype html>
     }
   }
 
-  function applyOrgFilterFromHash() {
-    const orgId = readOrgFilterFromHash();
-
-    if (!orgId) {
+  function updateOrgFilterBadge(){
+    if (!selectedOrganology.length) {
       orgFilterBadge.style.display = 'none';
       orgFilterBadge.textContent = '';
       return;
     }
 
-    searchInput.value = orgId;
-
+    const labels = selectedOrganology.map(k => ORGANOLOGY_DISPLAY.get(k) || k);
     orgFilterBadge.style.display = '';
-    orgFilterBadge.innerHTML = `Organology link filter: <strong>${orgId}</strong> ×`;
-    orgFilterBadge.title = 'Click to clear this Organology link filter';
+    orgFilterBadge.innerHTML = `Organology filter: <strong>${labels.join(', ')}</strong> ×`;
+    orgFilterBadge.title = 'Click to clear this Organology filter';
+  }
+
+  function applyOrgFilterFromHash() {
+    const keys = readOrgFilterFromHash();
+    if (!keys.length) {
+      updateOrgFilterBadge();
+      return;
+    }
+    setOrganologySelection(keys);
+    updateOrgFilterBadge();
   }
 
   orgFilterBadge.addEventListener('click', () => {
     clearOrgHash();
-    searchInput.value = '';
-    orgFilterBadge.style.display = 'none';
-    orgFilterBadge.textContent = '';
+    setOrganologySelection([]);
+    updateOrgFilterBadge();
     applyFilters();
   });
 
@@ -4066,6 +4282,7 @@ index_template = """<!doctype html>
     applyFilters();
   });
 
+  renderOrganologyChips();
   applyOrgFilterFromHash();
 
   // ============ Clear all filters
@@ -4097,6 +4314,12 @@ index_template = """<!doctype html>
     libraryInput.value = '';
     closeLibraryMenu();
     renderLibraryChips();
+
+    setOrganologySelection([]);
+    organologyMatchMode.value = 'any';
+    organologyInput.value = '';
+    closeOrganologyMenu();
+    updateOrgFilterBadge();
 
     rismNoInput.value = '';
 
@@ -4192,6 +4415,10 @@ index_template = """<!doctype html>
 
   function parseRismNumberPieces(card){
     return parseJsonDataset(card, 'rismPieces', '__rismPieces');
+  }
+
+  function parseOrganologyPieces(card){
+    return parseJsonDataset(card, 'organologyPieces', '__organologyPieces');
   }
 
   // ============ Matching logic: Search Tool
@@ -4291,6 +4518,25 @@ index_template = """<!doctype html>
     for(const p of pieces){
       const values = p.values || [];
       if(intersectsOrContains(values, selectedLibraries, mode)){
+        matchPids.add(p.pid);
+      }
+    }
+
+    return {ok: matchPids.size > 0, matchPids};
+  }
+
+  // ============ Matching logic: Organology
+  function matchesOrganologyFilter(card){
+    if(!selectedOrganology.length) return {ok:true, matchPids:new Set()};
+
+    const mode = organologyMatchMode.value || 'any';
+    const pieces = parseOrganologyPieces(card);
+    if(!pieces.length) return {ok:false, matchPids:new Set()};
+
+    const matchPids = new Set();
+    for(const p of pieces){
+      const values = p.values || [];
+      if(intersectsOrContains(values, selectedOrganology, mode)){
         matchPids.add(p.pid);
       }
     }
@@ -4450,6 +4696,7 @@ index_template = """<!doctype html>
     const compActiveOn = !!composerSelected;
     const bibActiveOn = selectedBibliography.length > 0;
     const libraryActiveOn = selectedLibraries.length > 0;
+    const organologyActiveOn = selectedOrganology.length > 0;
     const rismActiveOn = !!normalizeRismNo(rismNoInput.value);
 
     const pieceLevelActive =
@@ -4458,6 +4705,7 @@ index_template = """<!doctype html>
       compActiveOn ||
       bibActiveOn ||
       libraryActiveOn ||
+      organologyActiveOn ||
       rismActiveOn;
 
     cards.forEach(card => {
@@ -4501,6 +4749,12 @@ index_template = """<!doctype html>
         if(!libraryMatch.ok) ok = false;
       }
 
+      let organologyMatch = {ok:true, matchPids:new Set()};
+      if(ok){
+        organologyMatch = matchesOrganologyFilter(card);
+        if(!organologyMatch.ok) ok = false;
+      }
+
       let rismMatch = {ok:true, matchPids:new Set()};
       if(ok){
         rismMatch = matchesRismNumberFilter(card);
@@ -4517,6 +4771,7 @@ index_template = """<!doctype html>
         if(yrActiveOn) sets.push(yrMatch.matchPids);
         if(bibActiveOn) sets.push(bibMatch.matchPids);
         if(libraryActiveOn) sets.push(libraryMatch.matchPids);
+        if(organologyActiveOn) sets.push(organologyMatch.matchPids);
         if(rismActiveOn) sets.push(rismMatch.matchPids);
 
         if(sets.length){
@@ -4590,6 +4845,9 @@ index_template = """<!doctype html>
     }
     if(!libraryMenu.contains(ev.target) && ev.target !== libraryInput){
       closeLibraryMenu();
+    }
+    if(organologyMenu && !organologyMenu.contains(ev.target) && ev.target !== organologyInput){
+      closeOrganologyMenu();
     }
     if(!bibMenu.contains(ev.target) && ev.target !== bibToggle){
       closeBibMenu();
@@ -4848,7 +5106,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v21-mobile-filter-panel-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v22-organology-filter-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -4979,6 +5237,8 @@ def main():
         rec["year_min"] = parse_int_safe(rec["rism_earliest_year_raw"])
         rec["year_max"] = parse_int_safe(rec["rism_latest_year_raw"])
         rec["bibliography_refs"] = bibliography_refs(rec["bibliography_raw"])
+        rec["organology_codes_raw"] = organology_codes(rec["organology_raw"])
+        rec["organology_codes_keys"] = [code.casefold() for code in rec["organology_codes_raw"]]
         rec["holdings_library_sigla_raw"] = holdings_libraries_sigla(
             rec["rism_holdings_raw"],
             rec["library_raw"]
@@ -5018,6 +5278,8 @@ def main():
                 "rism_publisher_printer_raw": "", "rism_publication_place_raw": "",
                 "year_min": None, "year_max": None,
                 "bibliography_refs": [],
+                "organology_codes_raw": [],
+                "organology_codes_keys": [],
                 "holdings_library_sigla_raw": [],
                 "holdings_library_sigla_keys": [],
             }
@@ -5070,6 +5332,20 @@ def main():
         for k, d in sorted(library_display_by_key.items(), key=lambda kv: kv[1].casefold())
     ]
     library_options_js = json.dumps(library_options, ensure_ascii=False)
+
+    # Organology instrument-code options
+    # Dedupe case-insensitively while preserving a preferred display form.
+    organology_display_by_key = {}
+    for rec in records.values():
+        for raw_code in rec.get("organology_codes_raw", []):
+            key = raw_code.casefold()
+            organology_display_by_key.setdefault(key, raw_code)
+
+    organology_options = [
+        {"k": k, "d": d}
+        for k, d in sorted(organology_display_by_key.items(), key=lambda kv: kv[1].casefold())
+    ]
+    organology_options_js = json.dumps(organology_options, ensure_ascii=False)
 
     # =========================
     # INDEX BUILD
@@ -5371,6 +5647,12 @@ def main():
             lambda rr: rr.get("holdings_library_sigla_keys", []),
             header_rec=header_for_json,
         )
+        organology_payload = piece_value_payload(
+            records,
+            data_piece_ids,
+            lambda rr: rr.get("organology_codes_keys", []),
+            header_rec=header_for_json,
+        )
         rism_payload = piece_value_payload(
             records,
             data_piece_ids,
@@ -5414,6 +5696,7 @@ def main():
       data-yr-pieces="{escape_attr(yr_pieces_blob)}"
       data-biblio-pieces="{json_attr(biblio_payload)}"
       data-library-pieces="{json_attr(library_payload)}"
+      data-organology-pieces="{json_attr(organology_payload)}"
       data-rism-pieces="{json_attr(rism_payload)}"
       data-sort-default="{default_order_idx}"
       data-sort-composer="{escape_attr(sort_composer_raw)}"
@@ -5460,7 +5743,8 @@ def main():
         .replace("@@SEARCH_TOOL_INSTRS@@", search_tool_js)
         .replace("@@COMPOSERS@@", composers_js)
         .replace("@@BIBLIO_OPTIONS@@", bibliography_options_js)
-        .replace("@@LIBRARY_OPTIONS@@", library_options_js),
+        .replace("@@LIBRARY_OPTIONS@@", library_options_js)
+        .replace("@@ORGANOLOGY_OPTIONS@@", organology_options_js),
         encoding="utf-8"
     )
 
@@ -5544,6 +5828,7 @@ def main():
     print("Composers indexed:", len(composer_set))
     print("Bibliography references indexed:", len(bibliography_options))
     print("Holdings / Libraries sigla indexed:", len(library_options))
+    print("Organology instrument codes indexed:", len(organology_options))
 
 if __name__ == "__main__":
     main()
