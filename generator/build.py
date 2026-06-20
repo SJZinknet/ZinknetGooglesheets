@@ -22,6 +22,7 @@
 # - v20 responsive cleanup: compact centered header + mobile Search Tool layout.
 # - v21 mobile filter panel: hamburger in header opens filters under sticky header.
 # - v22 Organology: dedicated multi-code instrument filter + URL hash support.
+# - v23 browseable dropdowns: show available options on focus for organology, holdings and instrumentation.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -1477,6 +1478,12 @@ details.filter-section[open] .section-arrow{
   background: rgba(35,75,184,0.06);
 }
 
+.instr-item.is-selected{
+  background:rgba(139,92,246,0.10);
+  color:var(--violet-text);
+  font-weight:650;
+}
+
 .instr-item-count{
   color:#6b7280;
   font-size:.8rem;
@@ -1620,11 +1627,36 @@ details.filter-section[open] .section-arrow{
   cursor:pointer;
   font-size:0.9rem;
   color:var(--text);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
 }
 
 .library-item:hover,
 .organology-item:hover{
   background: rgba(35,75,184,0.06);
+}
+
+.library-item.is-selected,
+.organology-item.is-selected{
+  background:rgba(139,92,246,0.10);
+  color:var(--violet-text);
+  font-weight:650;
+}
+
+.choice-item-label{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.choice-item-count{
+  color:#6b7280;
+  font-size:.8rem;
+  white-space:nowrap;
+  font-weight:500;
 }
 
 .entries {
@@ -3058,7 +3090,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v22-organology-filter-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v23-browseable-dropdowns-2026-06-02">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -3139,11 +3171,11 @@ index_template = """<!doctype html>
             <div class="section-body">
               <div class="filter-field instr-suggest-wrap">
                 <label for="instrInput">Simple search</label>
-                <input id="instrInput" type="text" placeholder="Type: cnto, trb, fag, bc…" autocomplete="off" />
+                <input id="instrInput" type="text" placeholder="Type or select: cnto, trb, fag, bc…" autocomplete="off" />
                 <div class="instr-menu" id="instrMenu">
                   <div class="instr-list" id="instrList"></div>
                 </div>
-                <div class="field-hint">Start typing, then select a suggestion or keep a free text search.</div>
+                <div class="field-hint">Click to browse available instruments, or type to narrow the list.</div>
               </div>
 
               <div class="filter-field search-tool-field">
@@ -3207,7 +3239,7 @@ index_template = """<!doctype html>
 
               <div class="filter-field" style="position:relative;">
                 <label for="organologyInput">Instrument code</label>
-                <input id="organologyInput" type="text" placeholder="Type an instrument code: cnto, trb, fag…" autocomplete="off" />
+                <input id="organologyInput" type="text" placeholder="Type or select an instrument code: cnto, trb, fag…" autocomplete="off" />
                 <div class="organology-menu" id="organologyMenu">
                   <div class="organology-list" id="organologyList"></div>
                 </div>
@@ -3292,7 +3324,7 @@ index_template = """<!doctype html>
 
               <div class="filter-field" style="position:relative;">
                 <label for="libraryInput">Sigla</label>
-                <input id="libraryInput" type="text" placeholder="Type a library siglum: GB-Lbl, A-Wn…" autocomplete="off" />
+                <input id="libraryInput" type="text" placeholder="Type or select a siglum: GB-Lbl, A-Wn…" autocomplete="off" />
                 <div class="library-menu" id="libraryMenu">
                   <div class="library-list" id="libraryList"></div>
                 </div>
@@ -3417,6 +3449,34 @@ index_template = """<!doctype html>
   function normalize(s){ return (s || '').toLowerCase(); }
   function normalizeLoose(s){ return (s || '').toLowerCase().replace(/\\s+/g,' ').trim(); }
   function normalizeRismNo(s){ return (s || '').replace(/\\D+/g,''); }
+
+
+  function optionLabel(obj){
+    return (obj && (obj.d || obj.k || '')) || '';
+  }
+
+  function optionCount(obj){
+    const n = Number(obj && obj.n);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function compareBrowseOptions(a, b){
+    const an = optionCount(a);
+    const bn = optionCount(b);
+    if(an !== bn) return bn - an;
+    return optionLabel(a).localeCompare(optionLabel(b), undefined, {sensitivity:'base'});
+  }
+
+  function browseOptions(options, query, limit, matcher){
+    const q = normalizeLoose(query);
+    const out = [];
+    for(const obj of options || []){
+      const ok = q ? matcher(obj, q) : true;
+      if(ok) out.push(obj);
+    }
+    out.sort(compareBrowseOptions);
+    return out.slice(0, limit);
+  }
   function parseIntSafe(x){
     const n = parseInt(x, 10);
     return Number.isFinite(n) ? n : null;
@@ -3812,17 +3872,12 @@ index_template = """<!doctype html>
   }
 
   function computeInstrHits(){
-    const q = normalizeLoose(instrInput.value);
-    if(!q) return [];
-    const hits = [];
-    for(const obj of SEARCH_TOOL_INSTRS){
-      const key = normalizeLoose(obj.k);
-      if(key.includes(q)){
-        hits.push(obj);
-        if(hits.length >= 35) break;
-      }
-    }
-    return hits;
+    return browseOptions(
+      SEARCH_TOOL_INSTRS,
+      instrInput.value,
+      60,
+      (obj, q) => normalizeLoose(obj.k).includes(q)
+    );
   }
 
   function openInstrMenu(items){
@@ -3832,8 +3887,10 @@ index_template = """<!doctype html>
     items.forEach(obj => {
       const div = document.createElement('div');
       div.className = 'instr-item';
+      if(normalizeLoose(instrInput.value) === normalizeLoose(obj.k)) div.classList.add('is-selected');
 
       const name = document.createElement('span');
+      name.className = 'choice-item-label';
       name.textContent = obj.k;
 
       const count = document.createElement('span');
@@ -4011,8 +4068,19 @@ index_template = """<!doctype html>
     items.forEach(obj => {
       const div = document.createElement('div');
       div.className = 'library-item';
-      div.textContent = obj.d;
+      if(selectedLibraries.includes(obj.k)) div.classList.add('is-selected');
       div.title = obj.d;
+
+      const label = document.createElement('span');
+      label.className = 'choice-item-label';
+      label.textContent = obj.d;
+
+      const count = document.createElement('span');
+      count.className = 'choice-item-count';
+      count.textContent = obj.n ? obj.n : '';
+
+      div.appendChild(label);
+      div.appendChild(count);
       div.addEventListener('click', () => {
         if(!selectedLibraries.includes(obj.k)){
           selectedLibraries.push(obj.k);
@@ -4035,18 +4103,12 @@ index_template = """<!doctype html>
   }
 
   function computeLibraryHits(){
-    const q = normalizeLoose(libraryInput.value);
-    if(!q) return [];
-    const hits = [];
-    for(const obj of LIBRARY_OPTIONS){
-      const display = normalizeLoose(obj.d);
-      const key = normalizeLoose(obj.k);
-      if(display.includes(q) || key.includes(q)){
-        hits.push(obj);
-        if(hits.length >= 40) break;
-      }
-    }
-    return hits;
+    return browseOptions(
+      LIBRARY_OPTIONS,
+      libraryInput.value,
+      80,
+      (obj, q) => normalizeLoose(obj.d).includes(q) || normalizeLoose(obj.k).includes(q)
+    );
   }
 
   function renderLibraryChips(){
@@ -4114,8 +4176,19 @@ index_template = """<!doctype html>
     items.forEach(obj => {
       const div = document.createElement('div');
       div.className = 'organology-item';
-      div.textContent = obj.d;
+      if(selectedOrganology.includes(obj.k)) div.classList.add('is-selected');
       div.title = obj.d;
+
+      const label = document.createElement('span');
+      label.className = 'choice-item-label';
+      label.textContent = obj.d;
+
+      const count = document.createElement('span');
+      count.className = 'choice-item-count';
+      count.textContent = obj.n ? obj.n : '';
+
+      div.appendChild(label);
+      div.appendChild(count);
       div.addEventListener('click', () => {
         if(!selectedOrganology.includes(obj.k)){
           selectedOrganology.push(obj.k);
@@ -4139,18 +4212,12 @@ index_template = """<!doctype html>
   }
 
   function computeOrganologyHits(){
-    const q = normalizeOrganologyCode(organologyInput.value);
-    if(!q) return [];
-    const hits = [];
-    for(const obj of ORGANOLOGY_OPTIONS){
-      const display = normalizeOrganologyCode(obj.d);
-      const key = normalizeOrganologyCode(obj.k);
-      if(display.includes(q) || key.includes(q)){
-        hits.push(obj);
-        if(hits.length >= 40) break;
-      }
-    }
-    return hits;
+    return browseOptions(
+      ORGANOLOGY_OPTIONS,
+      organologyInput.value,
+      80,
+      (obj, q) => normalizeOrganologyCode(obj.d).includes(q) || normalizeOrganologyCode(obj.k).includes(q)
+    );
   }
 
   function renderOrganologyChips(){
@@ -5106,7 +5173,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v22-organology-filter-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v23-browseable-dropdowns-2026-06-02">
 </head>
 <body>
 @@HEADER@@
@@ -5321,29 +5388,43 @@ def main():
 
     # Holdings / libraries options
     # Dedupe case-insensitively while preserving a preferred display form.
+    # v23 also stores a simple frequency count, used for browseable dropdowns.
     library_display_by_key = {}
+    library_count_by_key = {}
     for rec in records.values():
-        for raw_siglum in rec.get("holdings_library_sigla_raw", []):
-            key = raw_siglum.casefold()
-            library_display_by_key.setdefault(key, raw_siglum)
+        raw_by_key = {raw.casefold(): raw for raw in rec.get("holdings_library_sigla_raw", [])}
+        for key in set(rec.get("holdings_library_sigla_keys", [])):
+            display = raw_by_key.get(key, key)
+            library_display_by_key.setdefault(key, display)
+            library_count_by_key[key] = library_count_by_key.get(key, 0) + 1
 
     library_options = [
-        {"k": k, "d": d}
-        for k, d in sorted(library_display_by_key.items(), key=lambda kv: kv[1].casefold())
+        {"k": k, "d": d, "n": int(library_count_by_key.get(k, 0))}
+        for k, d in sorted(
+            library_display_by_key.items(),
+            key=lambda kv: (-library_count_by_key.get(kv[0], 0), kv[1].casefold())
+        )
     ]
     library_options_js = json.dumps(library_options, ensure_ascii=False)
 
     # Organology instrument-code options
     # Dedupe case-insensitively while preserving a preferred display form.
+    # v23 also stores a simple frequency count, used for browseable dropdowns.
     organology_display_by_key = {}
+    organology_count_by_key = {}
     for rec in records.values():
-        for raw_code in rec.get("organology_codes_raw", []):
-            key = raw_code.casefold()
-            organology_display_by_key.setdefault(key, raw_code)
+        raw_by_key = {raw.casefold(): raw for raw in rec.get("organology_codes_raw", [])}
+        for key in set(rec.get("organology_codes_keys", [])):
+            display = raw_by_key.get(key, key)
+            organology_display_by_key.setdefault(key, display)
+            organology_count_by_key[key] = organology_count_by_key.get(key, 0) + 1
 
     organology_options = [
-        {"k": k, "d": d}
-        for k, d in sorted(organology_display_by_key.items(), key=lambda kv: kv[1].casefold())
+        {"k": k, "d": d, "n": int(organology_count_by_key.get(k, 0))}
+        for k, d in sorted(
+            organology_display_by_key.items(),
+            key=lambda kv: (-organology_count_by_key.get(kv[0], 0), kv[1].casefold())
+        )
     ]
     organology_options_js = json.dumps(organology_options, ensure_ascii=False)
 
