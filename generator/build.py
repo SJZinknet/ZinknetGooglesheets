@@ -23,6 +23,7 @@
 # - v21 mobile filter panel: hamburger in header opens filters under sticky header.
 # - v22 Organology: dedicated multi-code instrument filter + URL hash support.
 # - v23 browseable dropdowns: show available options on focus for organology, holdings and instrumentation.
+# - v24 collection /0 fix, filter-text cleanup, and instrument lexicon labels/tooltips.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -66,6 +67,111 @@ COL_RISM_EARLIEST = "RISM Earliest Year"
 COL_RISM_LATEST = "RISM Latest Year"
 COL_RISM_PUBLISHER_PRINTER = "RISM Publisher / Printer"
 COL_RISM_PUBLICATION_PLACE = "RISM Publication Place"
+
+# Instrument lexicon imported from Lexique work in progress.xlsx (v24).
+# Keys are casefolded. The display map is deliberately WIP-safe: only filled values are used.
+INSTRUMENT_DISPLAY_LABELS = {
+    "a": "Alto voice",
+    "b": "Bass voice",
+    "b ad lib": "Bass instrument (ad libitum)",
+    "bariton": "Bariton voice",
+    "bassetto": "Bassetto",
+    "bc": "Basso continuo",
+    "bc: arp": "Basso continuo (arpa)",
+    "bc: org": "Basso continuo (organo)",
+    "bc: regal": "Basso continuo (regal)",
+    "bombarde": "Bombarde",
+    "cap": "Capella",
+    "cap 1": "Capella 1",
+    "cap 2": "Capella 2",
+    "cap 3": "Capella 3",
+    "cap 4": "Capella 4",
+    "cap ad lib": "Capella ad libitum",
+    "cap fiducinii": "Capella fiducinii",
+    "cap with instruments": "Capella with instruments",
+    "coro 1 cap": "Coro 1 capella",
+    "coro 1 conc": "Coro 1 concerto",
+    "coro 1 instr": "Coro 1 instrumentale",
+    "coro 1 rip": "Coro 1 ripieno",
+    "coro angelici cap": "Coro angelici Capella",
+    "coro inf": "Coro inferiori",
+    "coro instr": "Coro instrumenti",
+    "coro sup": "Coro superiori",
+    "coro voc": "Coro vocale",
+    "rip": "Ripieno",
+    "rip ad lib": "Ripieno ad libitum",
+    "rit": "Ritornello",
+    "sinf": "Sinfonia"
+}
+
+INSTRUMENT_SEARCH_LABELS = {
+    "a": "Alto voice",
+    "arp": "Arpa",
+    "b": "Bass voice",
+    "bagpipe": "Bagpipe",
+    "bariton": "Bariton voice",
+    "bassetto": "Bassetto",
+    "bc": "Basso continuo",
+    "bombarde": "Bombarde",
+    "cemb": "Cembalo",
+    "cetra": "Cetra",
+    "ciaramella": "Ciaramella",
+    "cimb": "Cimbalum",
+    "cl": "Clarinet",
+    "clno": "Clarino",
+    "cnto": "Cornetto",
+    "cnto muto": "Cornetto muto",
+    "colascione": "Colascione",
+    "cor": "Cor",
+    "cor da caccia": "Cor da Caccia",
+    "cor di bassetto": "Cor di Bassetto",
+    "cornettino": "Cornettino",
+    "crummhorn": "Crummhorn",
+    "dolzaine": "Dolzaine",
+    "fag": "Fagotto",
+    "fag.picc": "Fagotto piccolo",
+    "fiffaro": "Fiffaro",
+    "fl": "Flauto",
+    "i": "Instrumento",
+    "lira": "Lira",
+    "lirone": "Lirone",
+    "lituus": "Lituus",
+    "lute": "Lute",
+    "mandoline": "Mandoline",
+    "ob": "Oboe",
+    "org": "Organo",
+    "pf": "Pianoforte",
+    "pipe and tabor": "Pipe and Tabor",
+    "recorder": "Recorder",
+    "regal": "Regal",
+    "ribecchino": "Ribecchino",
+    "s": "Soprano voice",
+    "salterio": "Salterio",
+    "schryari": "Schryari",
+    "serpent": "Serpent",
+    "sordun": "Sordun",
+    "spinetta": "Spinetta",
+    "strings": "Strings",
+    "t": "Tenor voice",
+    "tamb": "Tamburro",
+    "tb": "Tuba",
+    "tenorete": "Tenorete",
+    "theorbe": "Theorbe",
+    "timp": "Timpanum",
+    "tr": "Trumpet",
+    "trb": "Trombone",
+    "v": "Voice",
+    "v 5": "Fifth voice",
+    "v/i": "Voice or Instrument",
+    "vihuela": "Vihuela",
+    "violetta": "Violetta",
+    "vl": "Violino",
+    "vla": "Viola",
+    "vla da gamba": "Viola da Gamba",
+    "vlc": "Violoncello",
+    "vlne": "Violone",
+    "winds": "Winds"
+}
 
 EM_TITLES = [
     "The Early Trombone : a Catalog of Music",
@@ -168,6 +274,86 @@ def unique_preserve_order(items):
             out.append(item)
     return out
 
+def norm_indiv_coll_marker(raw):
+    s = clean_str(raw).strip().casefold()
+    s = s.rstrip(".").strip()
+    return s
+
+def is_collection_marker(raw):
+    return norm_indiv_coll_marker(raw) == "coll"
+
+def is_collection_id(zid):
+    return clean_str(zid).endswith("/0")
+
+def is_real_collection_record(rec):
+    return is_collection_marker(rec.get("indiv_coll", "")) or is_collection_id(rec.get("id", ""))
+
+def instrument_search_label(code):
+    return INSTRUMENT_SEARCH_LABELS.get(clean_str(code).casefold(), "")
+
+def instrument_search_display(code):
+    code = clean_str(code)
+    if not code:
+        return ""
+    label = instrument_search_label(code)
+    return f"{label} ({code})" if label else code
+
+def instrument_search_terms_from_scenarios(scenarios):
+    terms = []
+    for sc in scenarios or []:
+        for k in sc.keys():
+            terms.append(k)
+            label = instrument_search_label(k)
+            if label:
+                terms.append(label)
+                terms.append(instrument_search_display(k))
+    return " ".join(unique_preserve_order([t for t in terms if t]))
+
+_INSTRUMENT_DISPLAY_PATTERN = None
+
+def escape_instrument_codes_with_tooltips(text):
+    """
+    Escape text for HTML while wrapping recognized instrument codes in
+    tooltip spans. Unknown codes remain untouched.
+    """
+    global _INSTRUMENT_DISPLAY_PATTERN
+
+    s = clean_str(text)
+    if not s:
+        return ""
+
+    if not INSTRUMENT_DISPLAY_LABELS:
+        return html.escape(s, quote=False).replace("\n", "<br>")
+
+    if _INSTRUMENT_DISPLAY_PATTERN is None:
+        keys = sorted(INSTRUMENT_DISPLAY_LABELS.keys(), key=len, reverse=True)
+        if not keys:
+            return html.escape(s, quote=False).replace("\n", "<br>")
+        # Avoid matching inside longer alpha-numeric / dotted / colon / hyphenated codes.
+        _INSTRUMENT_DISPLAY_PATTERN = re.compile(
+            r'(?<![A-Za-zÀ-ÖØ-öø-ÿ0-9_.:-])('
+            + "|".join(re.escape(k) for k in keys)
+            + r')(?![A-Za-zÀ-ÖØ-öø-ÿ0-9_.:-])',
+            flags=re.IGNORECASE
+        )
+
+    parts = []
+    last = 0
+    for m in _INSTRUMENT_DISPLAY_PATTERN.finditer(s):
+        parts.append(html.escape(s[last:m.start()], quote=False))
+        token = m.group(0)
+        label = INSTRUMENT_DISPLAY_LABELS.get(token.casefold(), "")
+        if label:
+            parts.append(
+                f'<span class="instr-code" title="{escape_attr(label)}">{html.escape(token, quote=False)}</span>'
+            )
+        else:
+            parts.append(html.escape(token, quote=False))
+        last = m.end()
+
+    parts.append(html.escape(s[last:], quote=False))
+    return "".join(parts).replace("\n", "<br>")
+
 def format_uniform_instr_content(raw_text):
     """
     Format uniform instrumentation content wherever it is displayed.
@@ -214,7 +400,7 @@ def format_uniform_instr_content(raw_text):
     if not t2.strip():
         return ""
 
-    return html.escape(t2, quote=False).replace("\n", "<br>")
+    return escape_instrument_codes_with_tooltips(t2)
 
 
 def format_uniform_instr(raw_text, alternative=False):
@@ -1869,6 +2055,12 @@ dd.meta-value {
   line-height:1.35;
 }
 
+.instr-code {
+  text-decoration: underline dotted rgba(80,90,130,.45);
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
 .subpieces {
   margin-top:8px;
   border-radius:14px;
@@ -3090,7 +3282,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v23-browseable-dropdowns-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v24-lexicon-collections-2026-06-29">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -3114,7 +3306,6 @@ index_template = """<!doctype html>
             <div class="filter-field">
               <label for="searchInput">Search all</label>
               <input id="searchInput" type="text" placeholder="Composer, title, number, library, bibliography…" />
-              <div class="field-hint">Broad search across the whole catalogue.</div>
             </div>
           </div>
 
@@ -3163,7 +3354,7 @@ index_template = """<!doctype html>
             <summary>
               <div class="section-title">
                 <strong>Instrumentation</strong>
-                <span>Simple search and Search Tool rules</span>
+                <span>Search by instrument or quantity</span>
               </div>
               <div class="section-arrow">›</div>
             </summary>
@@ -3171,11 +3362,10 @@ index_template = """<!doctype html>
             <div class="section-body">
               <div class="filter-field instr-suggest-wrap">
                 <label for="instrInput">Simple search</label>
-                <input id="instrInput" type="text" placeholder="Type or select: cnto, trb, fag, bc…" autocomplete="off" />
+                <input id="instrInput" type="text" placeholder="Type or select an instrument…" autocomplete="off" />
                 <div class="instr-menu" id="instrMenu">
                   <div class="instr-list" id="instrList"></div>
                 </div>
-                <div class="field-hint">Click to browse available instruments, or type to narrow the list.</div>
               </div>
 
               <div class="filter-field search-tool-field">
@@ -3212,7 +3402,7 @@ index_template = """<!doctype html>
                   <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
                 </div>
                 <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
-                <div class="field-hint search-tool-hint">Build include/exclude rules with instrument counts.</div>
+                <div class="field-hint search-tool-hint">Add rules by instrument and quantity.</div>
               </div>
             </div>
           </details>
@@ -3221,7 +3411,7 @@ index_template = """<!doctype html>
             <summary>
               <div class="section-title">
                 <strong>Organology</strong>
-                <span>Filter by instrument code</span>
+                <span>Filter by instrument</span>
               </div>
               <div class="section-arrow">›</div>
             </summary>
@@ -3238,13 +3428,12 @@ index_template = """<!doctype html>
               </div>
 
               <div class="filter-field" style="position:relative;">
-                <label for="organologyInput">Instrument code</label>
-                <input id="organologyInput" type="text" placeholder="Type or select an instrument code: cnto, trb, fag…" autocomplete="off" />
+                <label for="organologyInput">Instrument</label>
+                <input id="organologyInput" type="text" placeholder="Type or select an instrument…" autocomplete="off" />
                 <div class="organology-menu" id="organologyMenu">
                   <div class="organology-list" id="organologyList"></div>
                 </div>
                 <div id="organologyActive" class="active-filter-chips"></div>
-                <div class="field-hint">Use semicolons in the Google Sheet for multiple codes, e.g. cnto; trb.</div>
               </div>
             </div>
           </details>
@@ -3253,7 +3442,7 @@ index_template = """<!doctype html>
             <summary>
               <div class="section-title">
                 <strong>Date</strong>
-                <span>Filter by RISM/source date range</span>
+                <span>Filter by source date</span>
               </div>
               <div class="section-arrow">›</div>
             </summary>
@@ -3337,7 +3526,7 @@ index_template = """<!doctype html>
             <summary>
               <div class="section-title">
                 <strong>Identifiers</strong>
-                <span>Search exact catalogue identifiers</span>
+                <span>Search by RISM number</span>
               </div>
               <div class="section-arrow">›</div>
             </summary>
@@ -3854,12 +4043,18 @@ index_template = """<!doctype html>
   const stActive = document.getElementById('stActive');
 
   const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
+  const SEARCH_TOOL_DISPLAY = new Map(SEARCH_TOOL_INSTRS.map(o => [o.k, o.d || o.k]));
   const stRules = [];
+
+  function searchToolDisplay(k){
+    return SEARCH_TOOL_DISPLAY.get(k) || k;
+  }
 
   SEARCH_TOOL_INSTRS.forEach(o => {
     const opt = document.createElement('option');
     opt.value = o.k;
-    opt.textContent = `${o.k} (${o.n})`;
+    opt.textContent = `${o.d || o.k} (${o.n})`;
+    opt.title = o.k;
     stInstr.appendChild(opt);
   });
 
@@ -3876,7 +4071,7 @@ index_template = """<!doctype html>
       SEARCH_TOOL_INSTRS,
       instrInput.value,
       60,
-      (obj, q) => normalizeLoose(obj.k).includes(q)
+      (obj, q) => normalizeLoose(obj.k).includes(q) || normalizeLoose(obj.d || "").includes(q)
     );
   }
 
@@ -3891,7 +4086,7 @@ index_template = """<!doctype html>
 
       const name = document.createElement('span');
       name.className = 'choice-item-label';
-      name.textContent = obj.k;
+      name.textContent = obj.d || obj.k;
 
       const count = document.createElement('span');
       count.className = 'instr-item-count';
@@ -3924,7 +4119,7 @@ index_template = """<!doctype html>
       chip.style.cursor = 'pointer';
       const sign = r.mode === 'include' ? '+' : '–';
       const cmp = (r.cmp === 'eq') ? '=' : '≥';
-      chip.textContent = `${sign} ${r.k} ${cmp} ${r.n} ×`;
+      chip.textContent = `${sign} ${searchToolDisplay(r.k)} ${cmp} ${r.n} ×`;
       chip.title = 'Click to remove';
       chip.addEventListener('click', () => {
         stRules.splice(idx, 1);
@@ -5038,7 +5233,7 @@ def detail_organology_html(rec):
     return detail_doc_section_html("Organology", rec.get("organology", ""), full_span=False)
 
 def detail_is_collection_record(rec):
-    return rec.get("indiv_coll") in ("Coll.", "VirtualColl") or clean_str(rec.get("id", "")).endswith("/0")
+    return rec.get("indiv_coll") == "VirtualColl" or is_real_collection_record(rec)
 
 def detail_instr_html(rec):
     # Collection pages should go directly from COLLECTION/title to Content.
@@ -5173,7 +5368,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v23-browseable-dropdowns-2026-06-02">
+  <link rel="stylesheet" href="style.css?v=detail-v24-lexicon-collections-2026-06-29">
 </head>
 <body>
 @@HEADER@@
@@ -5298,9 +5493,10 @@ def main():
         rec["shelfmark"] = escape_textnode(rec["shelfmark_raw"])
         rec["category"] = escape_textnode(rec["category_raw"])
         rec["note"] = escape_textnode(rec["note_raw"])
-        rec["organology"] = escape_textnode(rec["organology_raw"])
+        rec["organology"] = escape_instrument_codes_with_tooltips(rec["organology_raw"])
 
         rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
+        rec["search_tool_terms_raw"] = instrument_search_terms_from_scenarios(rec["search_scenarios"])
         rec["year_min"] = parse_int_safe(rec["rism_earliest_year_raw"])
         rec["year_max"] = parse_int_safe(rec["rism_latest_year_raw"])
         rec["bibliography_refs"] = bibliography_refs(rec["bibliography_raw"])
@@ -5319,7 +5515,7 @@ def main():
 
     virtual_headers = set()
     for gid, ids in groups.items():
-        has_real_coll = any(records[z]["indiv_coll"] == "Coll." for z in ids if z in records)
+        has_real_coll = any(is_real_collection_record(records[z]) for z in ids if z in records)
         if (not has_real_coll) and len(ids) > 1:
             virtual_headers.add(gid)
             lib = next((records[z]["library_raw"] for z in ids if records.get(z, {}).get("library_raw")), "")
@@ -5339,7 +5535,7 @@ def main():
                 "library": escape_textnode(lib), "shelfmark": escape_textnode(shelf),
                 "category": "", "note": "", "organology": "",
                 "concordances_ids": [],
-                "search_tool_raw": "", "search_scenarios": [],
+                "search_tool_raw": "", "search_scenarios": [], "search_tool_terms_raw": "",
                 "rism_holdings_raw": "", "rism_date_raw": "",
                 "rism_earliest_year_raw": "", "rism_latest_year_raw": "",
                 "rism_publisher_printer_raw": "", "rism_publication_place_raw": "",
@@ -5365,7 +5561,10 @@ def main():
             instr_freq[k] = instr_freq.get(k, 0) + 1
     all_instr_sorted = sorted(all_instr, key=lambda x: x.lower())
     search_tool_js = json.dumps(
-        [{"k": k, "n": int(instr_freq.get(k, 0))} for k in all_instr_sorted],
+        [
+            {"k": k, "d": instrument_search_display(k), "n": int(instr_freq.get(k, 0))}
+            for k in all_instr_sorted
+        ],
         ensure_ascii=False
     )
 
@@ -5415,7 +5614,8 @@ def main():
     for rec in records.values():
         raw_by_key = {raw.casefold(): raw for raw in rec.get("organology_codes_raw", [])}
         for key in set(rec.get("organology_codes_keys", [])):
-            display = raw_by_key.get(key, key)
+            raw_display = raw_by_key.get(key, key)
+            display = instrument_search_display(raw_display)
             organology_display_by_key.setdefault(key, display)
             organology_count_by_key[key] = organology_count_by_key.get(key, 0) + 1
 
@@ -5436,7 +5636,7 @@ def main():
 
     for default_order_idx, gid in enumerate(sorted_group_ids):
         ids = groups[gid]
-        coll_id = next((z for z in ids if records.get(z, {}).get("indiv_coll") == "Coll."), None)
+        coll_id = next((z for z in ids if z in records and is_real_collection_record(records[z])), None)
         is_virtual_collection = gid in virtual_headers
 
         header_id = coll_id if coll_id else (gid if is_virtual_collection else ids[0])
@@ -5663,7 +5863,14 @@ def main():
         )
 
         instr_blob = " ".join(
-            ((records[z]["instr_rism_main_raw"] + " " + records[z]["instr_rism_alt_raw"] + " " + records[z]["instr_catalogs_raw"]).strip())
+            (
+                (
+                    records[z]["instr_rism_main_raw"] + " " +
+                    records[z]["instr_rism_alt_raw"] + " " +
+                    records[z]["instr_catalogs_raw"] + " " +
+                    records[z].get("search_tool_terms_raw", "")
+                ).strip()
+            )
             for z in ids
         ).replace("\n", " ")
 
@@ -5837,7 +6044,7 @@ def main():
 
         gid = rec["group"]
         ids_in_group = groups.get(gid, [zid])
-        coll_id = next((x for x in ids_in_group if records.get(x, {}).get("indiv_coll") == "Coll."), None)
+        coll_id = next((x for x in ids_in_group if x in records and is_real_collection_record(records[x])), None)
         is_virtual_group = gid in virtual_headers
 
         parent_id = coll_id if coll_id else (gid if is_virtual_group else "")
