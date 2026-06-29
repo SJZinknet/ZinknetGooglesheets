@@ -1175,6 +1175,12 @@ dd.meta-value {
   line-height:1.35;
 }
 
+.instr-code {
+  text-decoration: underline dotted rgba(80,90,130,.45);
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
 .subpieces {
   margin-top:8px;
   border-radius:14px;
