@@ -27,6 +27,8 @@
 # - v25 case-sensitive instrumentation codes: A/a, S/s, T/t, B/b stay distinct. Organology is not treated as instrumentation.
 # - v26 adaptive instrumentation Search Tool: larger only when Instrumentation is open,
 #   Cornetto family first, per-instrument rule lines, live catalogue filtering.
+# - v27 compact instrument labels: Search Tool rule rows show only the full name,
+#   not duplicated "Name (code) (code)" labels.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -3579,7 +3581,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v26-adaptive-instrument-search-2026-07-01">
+  <link rel="stylesheet" href="style.css?v=detail-v27-compact-instrument-labels-2026-07-01">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -4347,7 +4349,7 @@ index_template = """<!doctype html>
     if(hits.length) openComposerMenu(hits);
   });
 
-  // ============ Search Tool controls — v26 adaptive instrument rule list
+  // ============ Search Tool controls — v27 adaptive instrument rule list
   const instrumentationSection = document.getElementById('instrumentationSection');
   const cornettoRuleList = document.getElementById('cornettoRuleList');
   const otherInstrumentRuleList = document.getElementById('otherInstrumentRuleList');
@@ -4445,6 +4447,7 @@ index_template = """<!doctype html>
     const rule = stRuleFor(k);
     const display = searchToolDisplay(k);
     const code = searchToolCodeLabel(k);
+    const title = k === CORNETTO_FAMILY_KEY ? display : `${display} [${code}]`;
     const pillClass = rule.active
       ? (rule.mode === 'exclude' ? 'instrument-rule-pill exclude' : 'instrument-rule-pill include')
       : 'instrument-rule-pill';
@@ -4454,7 +4457,7 @@ index_template = """<!doctype html>
     return `
       <div class="instrument-rule-line" data-st-rule="${escapeHtmlAttr(k)}">
         <button type="button" class="${pillClass}" data-st-cycle title="inactive → include → exclude → inactive">${stRulePillText(rule)}</button>
-        <div class="instrument-rule-name" title="${escapeHtmlAttr(display)}">${escapeHtmlText(display)} <span class="instrument-rule-code">(${escapeHtmlText(code)})</span></div>
+        <div class="instrument-rule-name" title="${escapeHtmlAttr(title)}">${escapeHtmlText(display)}</div>
         <div class="instrument-rule-controls">
           <button type="button" class="instrument-operator-btn" data-st-cmp title="Toggle ≥ / =">${cmp}</button>
           <button type="button" class="instrument-qty-btn" data-st-minus title="Decrease quantity">−</button>
@@ -5864,7 +5867,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v26-adaptive-instrument-search-2026-07-01">
+  <link rel="stylesheet" href="style.css?v=detail-v27-compact-instrument-labels-2026-07-01">
 </head>
 <body>
 @@HEADER@@
@@ -6058,9 +6061,15 @@ def main():
         for k in present:
             instr_freq[k] = instr_freq.get(k, 0) + 1
     all_instr_sorted = sorted(all_instr, key=lambda x: x.lower())
+    def instrument_search_display_compact(code):
+        code = clean_str(code)
+        if not code:
+            return ""
+        return instrument_search_label(code) or code
+
     search_tool_js = json.dumps(
         [
-            {"k": k, "d": instrument_search_display(k), "n": int(instr_freq.get(k, 0))}
+            {"k": k, "d": instrument_search_display_compact(k), "n": int(instr_freq.get(k, 0))}
             for k in all_instr_sorted
         ],
         ensure_ascii=False
