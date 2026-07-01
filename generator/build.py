@@ -24,6 +24,7 @@
 # - v22 Organology: dedicated multi-code instrument filter + URL hash support.
 # - v23 browseable dropdowns: show available options on focus for organology, holdings and instrumentation.
 # - v24 collection /0 fix, filter-text cleanup, and instrument lexicon labels/tooltips.
+# - v25 case-sensitive instrumentation codes: A/a, S/s, T/t, B/b stay distinct. Organology is not treated as instrumentation.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -69,7 +70,8 @@ COL_RISM_PUBLISHER_PRINTER = "RISM Publisher / Printer"
 COL_RISM_PUBLICATION_PLACE = "RISM Publication Place"
 
 # Instrument lexicon imported from Lexique work in progress.xlsx (v24).
-# Keys are casefolded. The display map is deliberately WIP-safe: only filled values are used.
+# Most lexicon keys are casefolded, but v25 adds case-sensitive overrides for
+# ZinkNET instrumentation codes where uppercase/lowercase carry different meanings.
 INSTRUMENT_DISPLAY_LABELS = {
     "a": "Alto voice",
     "b": "Bass voice",
@@ -171,6 +173,31 @@ INSTRUMENT_SEARCH_LABELS = {
     "vlc": "Violoncello",
     "vlne": "Violone",
     "winds": "Winds"
+}
+
+# Case-sensitive overrides for instrumentation/Search Tool codes.
+# These codes are intentionally NOT normalized with casefold():
+# uppercase = voice; lowercase = instrument.
+CASE_SENSITIVE_INSTRUMENT_SEARCH_LABELS = {
+    "S": "Soprano voice",
+    "s": "Soprano instrument",
+    "A": "Alto voice",
+    "a": "Alto instrument",
+    "T": "Tenor voice",
+    "t": "Tenor instrument",
+    "B": "Bass voice",
+    "b": "Bass instrument",
+}
+
+CASE_SENSITIVE_INSTRUMENT_DISPLAY_LABELS = {
+    "S": "Soprano voice",
+    "s": "Soprano instrument",
+    "A": "Alto voice",
+    "a": "Alto instrument",
+    "T": "Tenor voice",
+    "t": "Tenor instrument",
+    "B": "Bass voice",
+    "b": "Bass instrument",
 }
 
 EM_TITLES = [
@@ -289,7 +316,27 @@ def is_real_collection_record(rec):
     return is_collection_marker(rec.get("indiv_coll", "")) or is_collection_id(rec.get("id", ""))
 
 def instrument_search_label(code):
-    return INSTRUMENT_SEARCH_LABELS.get(clean_str(code).casefold(), "")
+    code = clean_str(code)
+    if not code:
+        return ""
+
+    # v25: exact-case lookup first. A/a, S/s, T/t, B/b are distinct
+    # in ZinkNET instrumentation and Search Tool data.
+    if code in CASE_SENSITIVE_INSTRUMENT_SEARCH_LABELS:
+        return CASE_SENSITIVE_INSTRUMENT_SEARCH_LABELS[code]
+
+    return INSTRUMENT_SEARCH_LABELS.get(code.casefold(), "")
+
+def instrument_display_label(code):
+    code = clean_str(code)
+    if not code:
+        return ""
+
+    # v25: exact-case lookup first for documentary instrumentation.
+    if code in CASE_SENSITIVE_INSTRUMENT_DISPLAY_LABELS:
+        return CASE_SENSITIVE_INSTRUMENT_DISPLAY_LABELS[code]
+
+    return INSTRUMENT_DISPLAY_LABELS.get(code.casefold(), "")
 
 def instrument_search_display(code):
     code = clean_str(code)
@@ -326,15 +373,19 @@ def escape_instrument_codes_with_tooltips(text):
         return html.escape(s, quote=False).replace("\n", "<br>")
 
     if _INSTRUMENT_DISPLAY_PATTERN is None:
-        keys = sorted(INSTRUMENT_DISPLAY_LABELS.keys(), key=len, reverse=True)
+        keys = sorted(
+            set(INSTRUMENT_DISPLAY_LABELS.keys()) | set(CASE_SENSITIVE_INSTRUMENT_DISPLAY_LABELS.keys()),
+            key=len,
+            reverse=True
+        )
         if not keys:
             return html.escape(s, quote=False).replace("\n", "<br>")
         # Avoid matching inside longer alpha-numeric / dotted / colon / hyphenated codes.
+        # v25: deliberately case-sensitive, because A and a are different codes.
         _INSTRUMENT_DISPLAY_PATTERN = re.compile(
             r'(?<![A-Za-zÀ-ÖØ-öø-ÿ0-9_.:-])('
             + "|".join(re.escape(k) for k in keys)
-            + r')(?![A-Za-zÀ-ÖØ-öø-ÿ0-9_.:-])',
-            flags=re.IGNORECASE
+            + r')(?![A-Za-zÀ-ÖØ-öø-ÿ0-9_.:-])'
         )
 
     parts = []
@@ -342,7 +393,7 @@ def escape_instrument_codes_with_tooltips(text):
     for m in _INSTRUMENT_DISPLAY_PATTERN.finditer(s):
         parts.append(html.escape(s[last:m.start()], quote=False))
         token = m.group(0)
-        label = INSTRUMENT_DISPLAY_LABELS.get(token.casefold(), "")
+        label = instrument_display_label(token)
         if label:
             parts.append(
                 f'<span class="instr-code" title="{escape_attr(label)}">{html.escape(token, quote=False)}</span>'
@@ -3282,7 +3333,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v24-lexicon-collections-2026-06-29">
+  <link rel="stylesheet" href="style.css?v=detail-v25-case-sensitive-instrumentation-2026-07-01">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -3638,6 +3689,37 @@ index_template = """<!doctype html>
   function normalize(s){ return (s || '').toLowerCase(); }
   function normalizeLoose(s){ return (s || '').toLowerCase().replace(/\\s+/g,' ').trim(); }
   function normalizeRismNo(s){ return (s || '').replace(/\\D+/g,''); }
+
+  // v25: in instrumentation codes, uppercase/lowercase can have different meanings.
+  // A = Alto voice; a = Alto instrument, etc. This affects only instrumentation
+  // simple search, not the Organology system.
+  const CASE_SENSITIVE_INSTR_CODES = new Set(['S', 's', 'A', 'a', 'T', 't', 'B', 'b']);
+
+  function escapeRegExp(s){
+    return String(s || '').replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+  }
+
+  function instrumentCodeTokenRegex(code){
+    return new RegExp(
+      '(^|[^A-Za-zÀ-ÖØ-öø-ÿ0-9_.:-])' +
+      escapeRegExp(code) +
+      '($|[^A-Za-zÀ-ÖØ-öø-ÿ0-9_.:-])'
+    );
+  }
+
+  function matchesSimpleInstrumentQuery(card, queryRaw){
+    const q = (queryRaw || '').trim();
+    if(!q) return true;
+
+    const raw = card.dataset.instr || '';
+
+    // For single-letter ZinkNET instrumentation codes, case matters.
+    if(CASE_SENSITIVE_INSTR_CODES.has(q)){
+      return instrumentCodeTokenRegex(q).test(raw);
+    }
+
+    return normalize(raw).includes(normalize(q));
+  }
 
 
   function optionLabel(obj){
@@ -4945,7 +5027,7 @@ index_template = """<!doctype html>
   // ============ Main filter
   function applyFilters() {
     const q  = normalize(searchInput.value);
-    const qi = normalize(instrInput.value);
+    const qiRaw = (instrInput.value || '').trim();
     const mt = musicFilter.value;
     const st = sourceFilter.value;
     const msd = msDetailFilter.value;
@@ -4972,14 +5054,13 @@ index_template = """<!doctype html>
 
     cards.forEach(card => {
       const text  = normalize(card.dataset.search);
-      const instr = normalize(card.dataset.instr);
       const mts = (card.dataset.musicTypes || '').split('||').filter(Boolean);
       const sourceCats = (card.dataset.sourceCategories || '').split('||').filter(Boolean);
       const msDetails = (card.dataset.msDetails || '').split('||').filter(Boolean);
 
       let ok = true;
       if (q  && !text.includes(q)) ok = false;
-      if (qi && !instr.includes(qi)) ok = false;
+      if (qiRaw && !matchesSimpleInstrumentQuery(card, qiRaw)) ok = false;
       if (mt && !mts.includes(mt)) ok = false;
       if (st && !sourceCats.includes(st)) ok = false;
       if (msd && !msDetails.includes(msd)) ok = false;
@@ -5368,7 +5449,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v24-lexicon-collections-2026-06-29">
+  <link rel="stylesheet" href="style.css?v=detail-v25-case-sensitive-instrumentation-2026-07-01">
 </head>
 <body>
 @@HEADER@@
@@ -5493,7 +5574,9 @@ def main():
         rec["shelfmark"] = escape_textnode(rec["shelfmark_raw"])
         rec["category"] = escape_textnode(rec["category_raw"])
         rec["note"] = escape_textnode(rec["note_raw"])
-        rec["organology"] = escape_instrument_codes_with_tooltips(rec["organology_raw"])
+        # Organology is a separate system, not the instrumentation code system.
+        # v25: do not apply instrumentation-code labels/tooltips here.
+        rec["organology"] = escape_textnode(rec["organology_raw"])
 
         rec["search_scenarios"] = parse_search_tool_to_scenarios(rec["search_tool_raw"], limit=256)
         rec["search_tool_terms_raw"] = instrument_search_terms_from_scenarios(rec["search_scenarios"])
