@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v25-case-sensitive-instrumentation-2026-07-01">
+  <link rel="stylesheet" href="style.css?v=detail-v26-adaptive-instrument-search-2026-07-01">
 </head>
 <body class="index-page">
 
@@ -102,7 +102,7 @@
             </div>
           </details>
 
-          <details class="filter-section">
+          <details class="filter-section instrumentation-section" id="instrumentationSection">
             <summary>
               <div class="section-title">
                 <strong>Instrumentation</strong>
@@ -122,39 +122,25 @@
 
               <div class="filter-field search-tool-field">
                 <label>Search Tool</label>
-                <div class="filter-inline search-tool-controls" style="gap:6px;">
-                  <select id="stMode">
-                    <option value="include">Include</option>
-                    <option value="exclude">Exclude</option>
-                  </select>
+                <div class="instrument-tool-panel">
+                  <div class="instrument-family-block">
+                    <div class="instrument-block-title">Cornetto family</div>
+                    <p class="instrument-block-note">Quantity applies to the selected line. “Any cornetto” sums the family.</p>
+                    <div class="instrument-rule-list" id="cornettoRuleList"></div>
+                  </div>
 
-                  <select id="stCmp">
-                    <option value="ge">≥</option>
-                    <option value="eq">=</option>
-                  </select>
+                  <div class="instrument-family-block other-instruments-block">
+                    <div class="instrument-block-title">Other instruments</div>
+                    <input id="stOtherFilter" class="instrument-filter-input" type="text" placeholder="Filter other instruments…" autocomplete="off" />
+                    <div class="instrument-rule-list instrument-other-list" id="otherInstrumentRuleList"></div>
+                  </div>
 
-                  <select id="stInstr">
-                    <option value="">Select instrument…</option>
-                  </select>
-
-                  <select id="stQty">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                    <option value="7">7</option>
-                    <option value="8">8</option>
-                    <option value="9">9</option>
-                    <option value="10">10</option>
-                  </select>
-
-                  <button id="stAdd" type="button" class="tag" style="cursor:pointer;">Add</button>
-                  <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear</button>
+                  <div class="instrument-active-block">
+                    <div class="instrument-active-title">Active instrument rules</div>
+                    <div id="stActive"></div>
+                    <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear instrument rules</button>
+                  </div>
                 </div>
-                <div id="stActive" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
-                <div class="field-hint search-tool-hint">Add rules by instrument and quantity.</div>
               </div>
             </div>
           </details>
@@ -135932,30 +135918,198 @@
     if(hits.length) openComposerMenu(hits);
   });
 
-  // ============ Search Tool controls
-  const stMode  = document.getElementById('stMode');
-  const stCmp   = document.getElementById('stCmp');
-  const stInstr = document.getElementById('stInstr');
-  const stQty   = document.getElementById('stQty');
-  const stAdd   = document.getElementById('stAdd');
+  // ============ Search Tool controls — v26 adaptive instrument rule list
+  const instrumentationSection = document.getElementById('instrumentationSection');
+  const cornettoRuleList = document.getElementById('cornettoRuleList');
+  const otherInstrumentRuleList = document.getElementById('otherInstrumentRuleList');
+  const stOtherFilter = document.getElementById('stOtherFilter');
   const stClear = document.getElementById('stClear');
   const stActive = document.getElementById('stActive');
 
-  const SEARCH_TOOL_INSTRS = [{"k": "a", "d": "Alto instrument (a)", "n": 60}, {"k": "A", "d": "Alto voice (A)", "n": 2092}, {"k": "arp", "d": "Arpa (arp)", "n": 38}, {"k": "B", "d": "Bass voice (B)", "n": 2146}, {"k": "b", "d": "Bass instrument (b)", "n": 126}, {"k": "Bariton", "d": "Bariton voice (Bariton)", "n": 1}, {"k": "bassetto", "d": "Bassetto (bassetto)", "n": 1}, {"k": "bc", "d": "Basso continuo (bc)", "n": 1051}, {"k": "bombarde", "d": "Bombarde (bombarde)", "n": 78}, {"k": "cemb", "d": "Cembalo (cemb)", "n": 43}, {"k": "cetra", "d": "Cetra (cetra)", "n": 14}, {"k": "ciaramella", "d": "Ciaramella (ciaramella)", "n": 5}, {"k": "cimb", "d": "Cimbalum (cimb)", "n": 1}, {"k": "cl", "d": "Clarinet (cl)", "n": 4}, {"k": "clno", "d": "Clarino (clno)", "n": 2}, {"k": "cnto", "d": "Cornetto (cnto)", "n": 2707}, {"k": "cnto muto", "d": "Cornetto muto (cnto muto)", "n": 48}, {"k": "colascione", "d": "Colascione (colascione)", "n": 5}, {"k": "cor", "d": "Cor (cor)", "n": 10}, {"k": "cor da caccia", "d": "Cor da Caccia (cor da caccia)", "n": 3}, {"k": "cor di bassetto", "d": "Cor di Bassetto (cor di bassetto)", "n": 2}, {"k": "cornettino", "d": "Cornettino (cornettino)", "n": 273}, {"k": "crummhorn", "d": "Crummhorn (crummhorn)", "n": 7}, {"k": "fag", "d": "Fagotto (fag)", "n": 1254}, {"k": "fag.picc", "d": "Fagotto piccolo (fag.picc)", "n": 2}, {"k": "fiffaro", "d": "Fiffaro (fiffaro)", "n": 16}, {"k": "fl", "d": "Flauto (fl)", "n": 148}, {"k": "i", "d": "Instrumento (i)", "n": 28}, {"k": "lira", "d": "Lira (lira)", "n": 5}, {"k": "lirone", "d": "Lirone (lirone)", "n": 12}, {"k": "lituus", "d": "Lituus (lituus)", "n": 2}, {"k": "lute", "d": "Lute (lute)", "n": 109}, {"k": "mandoline", "d": "Mandoline (mandoline)", "n": 3}, {"k": "ob", "d": "Oboe (ob)", "n": 86}, {"k": "org", "d": "Organo (org)", "n": 1627}, {"k": "pf", "d": "Pianoforte (pf)", "n": 1}, {"k": "pipe and tabor", "d": "Pipe and Tabor (pipe and tabor)", "n": 1}, {"k": "positif", "d": "positif", "n": 55}, {"k": "recorder", "d": "Recorder (recorder)", "n": 1}, {"k": "regal", "d": "Regal (regal)", "n": 10}, {"k": "ribecchino", "d": "Ribecchino (ribecchino)", "n": 1}, {"k": "S", "d": "Soprano voice (S)", "n": 2251}, {"k": "s", "d": "Soprano instrument (s)", "n": 66}, {"k": "salterio", "d": "Salterio (salterio)", "n": 3}, {"k": "schryari", "d": "Schryari (schryari)", "n": 3}, {"k": "serpent", "d": "Serpent (serpent)", "n": 2}, {"k": "Sinf vl", "d": "Sinf vl", "n": 1}, {"k": "sordun", "d": "Sordun (sordun)", "n": 1}, {"k": "spinetta", "d": "Spinetta (spinetta)", "n": 5}, {"k": "strings", "d": "Strings (strings)", "n": 4}, {"k": "T", "d": "Tenor voice (T)", "n": 2174}, {"k": "t", "d": "Tenor instrument (t)", "n": 63}, {"k": "tab", "d": "tab", "n": 1}, {"k": "tamb", "d": "Tamburro (tamb)", "n": 2}, {"k": "tb", "d": "Tuba (tb)", "n": 2}, {"k": "tenorete", "d": "Tenorete (tenorete)", "n": 1}, {"k": "theorbe", "d": "Theorbe (theorbe)", "n": 184}, {"k": "timp", "d": "Timpanum (timp)", "n": 255}, {"k": "tr", "d": "Trumpet (tr)", "n": 532}, {"k": "trb", "d": "Trombone (trb)", "n": 2308}, {"k": "V", "d": "Voice (V)", "n": 73}, {"k": "V 5", "d": "Fifth voice (V 5)", "n": 4}, {"k": "violetta", "d": "Violetta (violetta)", "n": 102}, {"k": "vl", "d": "Violino (vl)", "n": 2252}, {"k": "vla", "d": "Viola (vla)", "n": 957}, {"k": "vla da gamba", "d": "Viola da Gamba (vla da gamba)", "n": 73}, {"k": "vlc", "d": "Violoncello (vlc)", "n": 695}, {"k": "vlne", "d": "Violone (vlne)", "n": 1370}];
+  const SEARCH_TOOL_INSTRS = [{"k": "A", "d": "Alto voice (A)", "n": 2092}, {"k": "a", "d": "Alto instrument (a)", "n": 60}, {"k": "arp", "d": "Arpa (arp)", "n": 38}, {"k": "B", "d": "Bass voice (B)", "n": 2146}, {"k": "b", "d": "Bass instrument (b)", "n": 126}, {"k": "Bariton", "d": "Bariton voice (Bariton)", "n": 1}, {"k": "bassetto", "d": "Bassetto (bassetto)", "n": 1}, {"k": "bc", "d": "Basso continuo (bc)", "n": 1051}, {"k": "bombarde", "d": "Bombarde (bombarde)", "n": 78}, {"k": "cemb", "d": "Cembalo (cemb)", "n": 43}, {"k": "cetra", "d": "Cetra (cetra)", "n": 14}, {"k": "ciaramella", "d": "Ciaramella (ciaramella)", "n": 5}, {"k": "cimb", "d": "Cimbalum (cimb)", "n": 1}, {"k": "cl", "d": "Clarinet (cl)", "n": 4}, {"k": "clno", "d": "Clarino (clno)", "n": 2}, {"k": "cnto", "d": "Cornetto (cnto)", "n": 2707}, {"k": "cnto muto", "d": "Cornetto muto (cnto muto)", "n": 48}, {"k": "colascione", "d": "Colascione (colascione)", "n": 5}, {"k": "cor", "d": "Cor (cor)", "n": 10}, {"k": "cor da caccia", "d": "Cor da Caccia (cor da caccia)", "n": 3}, {"k": "cor di bassetto", "d": "Cor di Bassetto (cor di bassetto)", "n": 2}, {"k": "cornettino", "d": "Cornettino (cornettino)", "n": 273}, {"k": "crummhorn", "d": "Crummhorn (crummhorn)", "n": 7}, {"k": "fag", "d": "Fagotto (fag)", "n": 1254}, {"k": "fag.picc", "d": "Fagotto piccolo (fag.picc)", "n": 2}, {"k": "fiffaro", "d": "Fiffaro (fiffaro)", "n": 16}, {"k": "fl", "d": "Flauto (fl)", "n": 148}, {"k": "i", "d": "Instrumento (i)", "n": 28}, {"k": "lira", "d": "Lira (lira)", "n": 5}, {"k": "lirone", "d": "Lirone (lirone)", "n": 12}, {"k": "lituus", "d": "Lituus (lituus)", "n": 2}, {"k": "lute", "d": "Lute (lute)", "n": 109}, {"k": "mandoline", "d": "Mandoline (mandoline)", "n": 3}, {"k": "ob", "d": "Oboe (ob)", "n": 86}, {"k": "org", "d": "Organo (org)", "n": 1627}, {"k": "pf", "d": "Pianoforte (pf)", "n": 1}, {"k": "pipe and tabor", "d": "Pipe and Tabor (pipe and tabor)", "n": 1}, {"k": "positif", "d": "positif", "n": 55}, {"k": "recorder", "d": "Recorder (recorder)", "n": 1}, {"k": "regal", "d": "Regal (regal)", "n": 10}, {"k": "ribecchino", "d": "Ribecchino (ribecchino)", "n": 1}, {"k": "S", "d": "Soprano voice (S)", "n": 2251}, {"k": "s", "d": "Soprano instrument (s)", "n": 66}, {"k": "salterio", "d": "Salterio (salterio)", "n": 3}, {"k": "schryari", "d": "Schryari (schryari)", "n": 3}, {"k": "serpent", "d": "Serpent (serpent)", "n": 2}, {"k": "Sinf vl", "d": "Sinf vl", "n": 1}, {"k": "sordun", "d": "Sordun (sordun)", "n": 1}, {"k": "spinetta", "d": "Spinetta (spinetta)", "n": 5}, {"k": "strings", "d": "Strings (strings)", "n": 4}, {"k": "T", "d": "Tenor voice (T)", "n": 2174}, {"k": "t", "d": "Tenor instrument (t)", "n": 63}, {"k": "tab", "d": "tab", "n": 1}, {"k": "tamb", "d": "Tamburro (tamb)", "n": 2}, {"k": "tb", "d": "Tuba (tb)", "n": 2}, {"k": "tenorete", "d": "Tenorete (tenorete)", "n": 1}, {"k": "theorbe", "d": "Theorbe (theorbe)", "n": 184}, {"k": "timp", "d": "Timpanum (timp)", "n": 255}, {"k": "tr", "d": "Trumpet (tr)", "n": 532}, {"k": "trb", "d": "Trombone (trb)", "n": 2308}, {"k": "V", "d": "Voice (V)", "n": 73}, {"k": "V 5", "d": "Fifth voice (V 5)", "n": 4}, {"k": "violetta", "d": "Violetta (violetta)", "n": 102}, {"k": "vl", "d": "Violino (vl)", "n": 2252}, {"k": "vla", "d": "Viola (vla)", "n": 957}, {"k": "vla da gamba", "d": "Viola da Gamba (vla da gamba)", "n": 73}, {"k": "vlc", "d": "Violoncello (vlc)", "n": 695}, {"k": "vlne", "d": "Violone (vlne)", "n": 1370}];
   const SEARCH_TOOL_DISPLAY = new Map(SEARCH_TOOL_INSTRS.map(o => [o.k, o.d || o.k]));
+  const CORNETTO_FAMILY_KEY = '__cornetto_family__';
+  const CORNETTO_FAMILY_CODES = ['cnto', 'cornettino', 'cnto muto', 'cornetto muto'];
   const stRules = [];
 
+  function updateInstrumentationExpanded(){
+    document.body.classList.toggle(
+      'instrumentation-expanded',
+      !!(instrumentationSection && instrumentationSection.open)
+    );
+  }
+
+  if(instrumentationSection){
+    instrumentationSection.addEventListener('toggle', updateInstrumentationExpanded);
+    updateInstrumentationExpanded();
+  }
+
   function searchToolDisplay(k){
+    if(k === CORNETTO_FAMILY_KEY) return 'Any cornetto';
     return SEARCH_TOOL_DISPLAY.get(k) || k;
   }
 
-  SEARCH_TOOL_INSTRS.forEach(o => {
-    const opt = document.createElement('option');
-    opt.value = o.k;
-    opt.textContent = `${o.d || o.k} (${o.n})`;
-    opt.title = o.k;
-    stInstr.appendChild(opt);
-  });
+  function searchToolCodeLabel(k){
+    if(k === CORNETTO_FAMILY_KEY) return 'family';
+    return k;
+  }
+
+  function isCornettoFamilyCode(k){
+    return CORNETTO_FAMILY_CODES.includes(k);
+  }
+
+  function stRuleFor(k){
+    let rule = stRules.find(r => r.k === k);
+    if(!rule){
+      rule = {mode:'include', cmp:'ge', k:k, n:1, active:false};
+      stRules.push(rule);
+    }
+    return rule;
+  }
+
+  function activeStRules(){
+    return stRules.filter(r => r.active);
+  }
+
+  function stOptionByKey(k){
+    return SEARCH_TOOL_INSTRS.find(o => o.k === k) || null;
+  }
+
+  function stCountFor(k){
+    if(k === CORNETTO_FAMILY_KEY) return '';
+    const opt = stOptionByKey(k);
+    return opt && opt.n ? String(opt.n) : '';
+  }
+
+  function cycleStMode(rule){
+    if(!rule.active){
+      rule.active = true;
+      rule.mode = 'include';
+      return;
+    }
+    if(rule.mode === 'include'){
+      rule.mode = 'exclude';
+      return;
+    }
+    rule.active = false;
+    rule.mode = 'include';
+  }
+
+  function toggleStCmp(rule){
+    rule.cmp = rule.cmp === 'eq' ? 'ge' : 'eq';
+    rule.active = true;
+  }
+
+  function changeStQty(rule, delta){
+    rule.n = Math.max(0, Math.min(10, (parseInt(rule.n || '1', 10) || 1) + delta));
+    rule.active = true;
+  }
+
+  function stRulePillText(rule){
+    const sign = rule.active && rule.mode === 'exclude' ? '–' : '+';
+    const cmp = rule.cmp === 'eq' ? '=' : '≥';
+    return `${sign} ${cmp} ${rule.n}`;
+  }
+
+  function instrumentRuleLine(obj){
+    const k = obj.k;
+    const rule = stRuleFor(k);
+    const display = searchToolDisplay(k);
+    const code = searchToolCodeLabel(k);
+    const pillClass = rule.active
+      ? (rule.mode === 'exclude' ? 'instrument-rule-pill exclude' : 'instrument-rule-pill include')
+      : 'instrument-rule-pill';
+    const cmp = rule.cmp === 'eq' ? '=' : '≥';
+    const count = stCountFor(k);
+
+    return `
+      <div class="instrument-rule-line" data-st-rule="${escapeHtmlAttr(k)}">
+        <button type="button" class="${pillClass}" data-st-cycle title="inactive → include → exclude → inactive">${stRulePillText(rule)}</button>
+        <div class="instrument-rule-name" title="${escapeHtmlAttr(display)}">${escapeHtmlText(display)} <span class="instrument-rule-code">(${escapeHtmlText(code)})</span></div>
+        <div class="instrument-rule-controls">
+          <button type="button" class="instrument-operator-btn" data-st-cmp title="Toggle ≥ / =">${cmp}</button>
+          <button type="button" class="instrument-qty-btn" data-st-minus title="Decrease quantity">−</button>
+          <button type="button" class="instrument-qty-btn" data-st-plus title="Increase quantity">+</button>
+          <span class="instrument-rule-count">${escapeHtmlText(count)}</span>
+        </div>
+      </div>`;
+  }
+
+  function escapeHtmlText(s){
+    return String(s || '').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
+  }
+
+  function escapeHtmlAttr(s){
+    return escapeHtmlText(s).replace(/"/g, '&quot;');
+  }
+
+  function renderInstrumentRuleLists(){
+    if(!cornettoRuleList || !otherInstrumentRuleList) return;
+
+    const cornettoKnown = SEARCH_TOOL_INSTRS.filter(o => isCornettoFamilyCode(o.k));
+    const familyOptions = cornettoKnown.length
+      ? [{k:CORNETTO_FAMILY_KEY, d:'Any cornetto', n:''}, ...cornettoKnown]
+      : [];
+
+    cornettoRuleList.innerHTML = familyOptions.length
+      ? familyOptions.map(instrumentRuleLine).join('')
+      : '<div class="field-hint">No cornetto-family codes found in the Search Tool column.</div>';
+
+    const q = normalizeLoose(stOtherFilter ? stOtherFilter.value : '');
+    const otherOptions = SEARCH_TOOL_INSTRS
+      .filter(o => !isCornettoFamilyCode(o.k))
+      .filter(o => {
+        if(!q) return true;
+        return normalizeLoose(o.k).includes(q) || normalizeLoose(o.d || '').includes(q);
+      })
+      .sort(compareBrowseOptions);
+
+    otherInstrumentRuleList.innerHTML = otherOptions.map(instrumentRuleLine).join('');
+
+    document.querySelectorAll('[data-st-rule]').forEach(line => {
+      const k = line.getAttribute('data-st-rule');
+      const rule = stRuleFor(k);
+
+      const cycle = line.querySelector('[data-st-cycle]');
+      const cmpBtn = line.querySelector('[data-st-cmp]');
+      const minus = line.querySelector('[data-st-minus]');
+      const plus = line.querySelector('[data-st-plus]');
+
+      if(cycle) cycle.addEventListener('click', () => {
+        cycleStMode(rule);
+        renderStRules();
+        renderInstrumentRuleLists();
+        applyFilters();
+      });
+
+      if(cmpBtn) cmpBtn.addEventListener('click', () => {
+        toggleStCmp(rule);
+        renderStRules();
+        renderInstrumentRuleLists();
+        applyFilters();
+      });
+
+      if(minus) minus.addEventListener('click', () => {
+        changeStQty(rule, -1);
+        renderStRules();
+        renderInstrumentRuleLists();
+        applyFilters();
+      });
+
+      if(plus) plus.addEventListener('click', () => {
+        changeStQty(rule, 1);
+        renderStRules();
+        renderInstrumentRuleLists();
+        applyFilters();
+      });
+    });
+  }
+
+  if(stOtherFilter){
+    stOtherFilter.addEventListener('input', () => {
+      renderInstrumentRuleLists();
+    });
+  }
 
   function closeInstrMenu(){
     if(!instrMenu) return;
@@ -136012,39 +136166,44 @@
 
   function renderStRules(){
     stActive.innerHTML = '';
-    stRules.forEach((r, idx) => {
-      const chip = document.createElement('span');
-      chip.className = 'tag tag-conc';
-      chip.style.cursor = 'pointer';
+    const rules = activeStRules();
+
+    if(!rules.length){
+      const empty = document.createElement('div');
+      empty.className = 'field-hint';
+      empty.textContent = 'No active instrument rules.';
+      stActive.appendChild(empty);
+      return;
+    }
+
+    rules.forEach((r) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'active-filter-chip';
+      if(r.mode === 'exclude') chip.classList.add('exclude-chip');
       const sign = r.mode === 'include' ? '+' : '–';
       const cmp = (r.cmp === 'eq') ? '=' : '≥';
-      chip.textContent = `${sign} ${searchToolDisplay(r.k)} ${cmp} ${r.n} ×`;
+      chip.textContent = `${sign} ${cmp} ${r.n} ${searchToolDisplay(r.k)} ×`;
       chip.title = 'Click to remove';
       chip.addEventListener('click', () => {
-        stRules.splice(idx, 1);
+        r.active = false;
         renderStRules();
+        renderInstrumentRuleLists();
         applyFilters();
       });
       stActive.appendChild(chip);
     });
   }
 
-  stAdd.addEventListener('click', () => {
-    const k = stInstr.value;
-    const n = parseInt(stQty.value || '1', 10);
-    const mode = stMode.value;
-    const cmp = stCmp.value;
-    if(!k) return;
-    stRules.push({mode, cmp, k, n});
-    renderStRules();
-    applyFilters();
-  });
-
   stClear.addEventListener('click', () => {
     stRules.length = 0;
     renderStRules();
+    renderInstrumentRuleLists();
     applyFilters();
   });
+
+  renderStRules();
+  renderInstrumentRuleLists();
 
   // ============ Contextual manuscript detail filter
   function updateMsDetailVisibility() {
@@ -136456,6 +136615,7 @@
 
     instrInput.value = '';
     closeInstrMenu();
+    if(stOtherFilter) stOtherFilter.value = '';
     yearFrom.value = '';
     yearTo.value = '';
 
@@ -136490,6 +136650,7 @@
 
     stRules.length = 0;
     renderStRules();
+    renderInstrumentRuleLists();
 
     cards.forEach(card => {
       applyCollectionView(card, null);
@@ -136595,8 +136756,16 @@
     }
   }
 
+  function searchToolScenarioValue(sc, key){
+    if(key === CORNETTO_FAMILY_KEY){
+      return CORNETTO_FAMILY_CODES.reduce((total, code) => total + (sc[code] || 0), 0);
+    }
+    return sc[key] || 0;
+  }
+
   function matchesSearchTool(card){
-    if(!stRules.length) return {ok:true, matchPids:new Set()};
+    const rules = activeStRules();
+    if(!rules.length) return {ok:true, matchPids:new Set()};
     const pieces = parseSearchToolPieces(card);
     if(!pieces.length) return {ok:false, matchPids:new Set()};
 
@@ -136607,8 +136776,8 @@
       if(!scs.length) continue;
 
       const okPiece = scs.some(sc => {
-        for(const r of stRules){
-          const val = sc[r.k] || 0;
+        for(const r of rules){
+          const val = searchToolScenarioValue(sc, r.k);
           if(!ruleOk(val, r)) return false;
         }
         return true;
