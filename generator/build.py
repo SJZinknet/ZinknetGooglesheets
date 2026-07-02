@@ -29,6 +29,8 @@
 #   Cornetto family first, per-instrument rule lines, live catalogue filtering.
 # - v27 compact instrument labels: Search Tool rule rows show only the full name,
 #   not duplicated "Name (code) (code)" labels.
+# - v28 collection-index fix: inactive pre-rendered instrument rules no longer
+#   activate piece-level filtering and hide collection cards on page load.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -3581,7 +3583,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v27-compact-instrument-labels-2026-07-01">
+  <link rel="stylesheet" href="style.css?v=detail-v28-collection-index-filter-fix-2026-07-02">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -5453,7 +5455,7 @@ index_template = """<!doctype html>
     let visible = 0;
     let matchingPieces = 0;
 
-    const stActiveOn = stRules.length > 0;
+    const stActiveOn = activeStRules().length > 0;
     const yrActiveOn = (parseIntSafe(yearFrom.value) !== null) || (parseIntSafe(yearTo.value) !== null);
     const compActiveOn = !!composerSelected;
     const bibActiveOn = selectedBibliography.length > 0;
@@ -5867,7 +5869,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v27-compact-instrument-labels-2026-07-01">
+  <link rel="stylesheet" href="style.css?v=detail-v28-collection-index-filter-fix-2026-07-02">
 </head>
 <body>
 @@HEADER@@
