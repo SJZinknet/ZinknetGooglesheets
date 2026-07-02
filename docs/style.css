@@ -988,6 +988,54 @@ body.index-page .catalogue-card{
   }
 }
 
+
+/* v29 grouped instrument Search Tool */
+.instrument-category-list{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+}
+
+.instrument-category-block{
+  border:1px solid rgba(208,213,235,0.95);
+  background:#f8faff;
+  border-radius:13px;
+  padding:8px;
+  scroll-margin-top:10px;
+}
+
+.instrument-category-title{
+  margin:0 0 6px;
+  padding:0 2px;
+  font-size:.77rem;
+  line-height:1.1;
+  font-weight:780;
+  letter-spacing:.035em;
+  color:#374151;
+}
+
+.instrument-category-block.is-filtered-out{
+  display:none;
+}
+
+/* One scroll only: the full Search & filters column scrolls.
+   Instrument categories and their rows remain in the normal flow. */
+.instrument-other-list{
+  max-height:none;
+  overflow:visible;
+  padding-right:0;
+}
+
+.instrument-rule-line[hidden]{
+  display:none;
+}
+
+.instrument-tool-placeholder{
+  padding:8px 4px;
+  color:#6b7280;
+  font-size:.76rem;
+}
+
 /* Instrumentation simple-search dropdown */
 .instr-suggest-wrap{
   position:relative;
