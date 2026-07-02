@@ -31,6 +31,9 @@
 #   not duplicated "Name (code) (code)" labels.
 # - v28 collection-index fix: inactive pre-rendered instrument rules no longer
 #   activate piece-level filtering and hide collection cards on page load.
+# - v29 grouped instrument search: short always-visible categories, selectable
+#   category-wide rules, one filter-column scroll, lazy first-open rendering,
+#   event delegation, and safe alias/uncertainty matching.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -129,6 +132,7 @@ INSTRUMENT_SEARCH_LABELS = {
     "clno": "Clarino",
     "cnto": "Cornetto",
     "cnto muto": "Cornetto muto",
+    "cornetto muto": "Cornetto muto",
     "colascione": "Colascione",
     "cor": "Cor",
     "cor da caccia": "Cor da Caccia",
@@ -140,7 +144,7 @@ INSTRUMENT_SEARCH_LABELS = {
     "fag.picc": "Fagotto piccolo",
     "fiffaro": "Fiffaro",
     "fl": "Flauto",
-    "i": "Instrumento",
+    "i": "Instrument",
     "lira": "Lira",
     "lirone": "Lirone",
     "lituus": "Lituus",
@@ -150,6 +154,7 @@ INSTRUMENT_SEARCH_LABELS = {
     "org": "Organo",
     "pf": "Pianoforte",
     "pipe and tabor": "Pipe and Tabor",
+    "positif": "Positive organ",
     "recorder": "Recorder",
     "regal": "Regal",
     "ribecchino": "Ribecchino",
@@ -159,6 +164,7 @@ INSTRUMENT_SEARCH_LABELS = {
     "serpent": "Serpent",
     "sordun": "Sordun",
     "spinetta": "Spinetta",
+    "tab": "Tablature",
     "strings": "Strings",
     "t": "Tenor voice",
     "tamb": "Tamburro",
@@ -1925,6 +1931,54 @@ body.index-page .catalogue-card{
   }
 }
 
+
+/* v29 grouped instrument Search Tool */
+.instrument-category-list{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+}
+
+.instrument-category-block{
+  border:1px solid rgba(208,213,235,0.95);
+  background:#f8faff;
+  border-radius:13px;
+  padding:8px;
+  scroll-margin-top:10px;
+}
+
+.instrument-category-title{
+  margin:0 0 6px;
+  padding:0 2px;
+  font-size:.77rem;
+  line-height:1.1;
+  font-weight:780;
+  letter-spacing:.035em;
+  color:#374151;
+}
+
+.instrument-category-block.is-filtered-out{
+  display:none;
+}
+
+/* One scroll only: the full Search & filters column scrolls.
+   Instrument categories and their rows remain in the normal flow. */
+.instrument-other-list{
+  max-height:none;
+  overflow:visible;
+  padding-right:0;
+}
+
+.instrument-rule-line[hidden]{
+  display:none;
+}
+
+.instrument-tool-placeholder{
+  padding:8px 4px;
+  color:#6b7280;
+  font-size:.76rem;
+}
+
 /* Instrumentation simple-search dropdown */
 .instr-suggest-wrap{
   position:relative;
@@ -3583,7 +3637,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v28-collection-index-filter-fix-2026-07-02">
+  <link rel="stylesheet" href="style.css?v=detail-v29-grouped-instrument-search-2026-07-02">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -3671,18 +3725,9 @@ index_template = """<!doctype html>
 
               <div class="filter-field search-tool-field">
                 <label>Search Tool</label>
-                <div class="instrument-tool-panel">
-                  <div class="instrument-family-block">
-                    <div class="instrument-block-title">Cornetto family</div>
-                    <p class="instrument-block-note">Quantity applies to the selected line. “Any cornetto” sums the family.</p>
-                    <div class="instrument-rule-list" id="cornettoRuleList"></div>
-                  </div>
-
-                  <div class="instrument-family-block other-instruments-block">
-                    <div class="instrument-block-title">Other instruments</div>
-                    <input id="stOtherFilter" class="instrument-filter-input" type="text" placeholder="Filter other instruments…" autocomplete="off" />
-                    <div class="instrument-rule-list instrument-other-list" id="otherInstrumentRuleList"></div>
-                  </div>
+                <div class="instrument-tool-panel" id="instrumentToolPanel">
+                  <input id="stOtherFilter" class="instrument-filter-input" type="text" placeholder="Filter instruments…" autocomplete="off" />
+                  <div class="instrument-category-list" id="instrumentCategoryList"></div>
 
                   <div class="instrument-active-block">
                     <div class="instrument-active-title">Active instrument rules</div>
@@ -3952,6 +3997,16 @@ index_template = """<!doctype html>
     // For single-letter ZinkNET instrumentation codes, case matters.
     if(CASE_SENSITIVE_INSTR_CODES.has(q)){
       return instrumentCodeTokenRegex(q).test(raw);
+    }
+
+    // Broad Fagotto search: include piccolo fagotto and the still-unresolved
+    // tenorete, while their own simple-search entries remain available.
+    if(normalizeLoose(q) === 'fag' || normalizeLoose(q) === 'fagotto'){
+      return (
+        instrumentCodeTokenRegex('fag').test(raw) ||
+        instrumentCodeTokenRegex('fag.picc').test(raw) ||
+        instrumentCodeTokenRegex('tenorete').test(raw)
+      );
     }
 
     return normalize(raw).includes(normalize(q));
@@ -4351,25 +4406,126 @@ index_template = """<!doctype html>
     if(hits.length) openComposerMenu(hits);
   });
 
-  // ============ Search Tool controls — v27 adaptive instrument rule list
+  // ============ Search Tool controls — v29 grouped, lazy and delegated
   const instrumentationSection = document.getElementById('instrumentationSection');
-  const cornettoRuleList = document.getElementById('cornettoRuleList');
-  const otherInstrumentRuleList = document.getElementById('otherInstrumentRuleList');
+  const instrumentToolPanel = document.getElementById('instrumentToolPanel');
+  const instrumentCategoryList = document.getElementById('instrumentCategoryList');
   const stOtherFilter = document.getElementById('stOtherFilter');
   const stClear = document.getElementById('stClear');
   const stActive = document.getElementById('stActive');
 
   const SEARCH_TOOL_INSTRS = @@SEARCH_TOOL_INSTRS@@;
   const SEARCH_TOOL_DISPLAY = new Map(SEARCH_TOOL_INSTRS.map(o => [o.k, o.d || o.k]));
-  const CORNETTO_FAMILY_KEY = '__cornetto_family__';
-  const CORNETTO_FAMILY_CODES = ['cnto', 'cornettino', 'cnto muto', 'cornetto muto'];
   const stRules = [];
+  let instrumentToolBuilt = false;
+
+  const SEARCH_TOOL_CATEGORIES = [
+    {
+      id:'cornetto',
+      title:'Cornetto',
+      anyKey:'__st_any_cornetto__',
+      anyLabel:'Any cornetto',
+      fixed:true,
+      codes:['cnto','cornettino','cnto muto','cornetto muto'],
+      members:['cnto','cornettino','cnto muto','cornetto muto']
+    },
+    {
+      id:'voices',
+      title:'Voices',
+      anyKey:'__st_any_voice__',
+      anyLabel:'Any voice',
+      fixed:true,
+      codes:['S','A','T','Bariton','B','V 5','V'],
+      members:['S','A','T','Bariton','B','V 5','V']
+    },
+    {
+      id:'generic',
+      title:'Generic parts',
+      anyKey:'__st_any_generic__',
+      anyLabel:'Any generic part',
+      fixed:true,
+      codes:['s','a','t','tenorete','b','i'],
+      members:['s','a','t','tenorete','b','i']
+    },
+    {
+      id:'brass',
+      title:'Brass',
+      anyKey:'__st_any_brass__',
+      anyLabel:'Any brass',
+      codes:['trb','tr','cor','cor da caccia','clno','lituus','serpent','tb'],
+      members:['trb','tr','cor','cor da caccia','clno','lituus','serpent','tb']
+    },
+    {
+      id:'woodwinds',
+      title:'Woodwinds',
+      anyKey:'__st_any_woodwind__',
+      anyLabel:'Any woodwind',
+      codes:['fag','fl','ob','bombarde','fiffaro','crummhorn','ciaramella','cl','schryari','cor di bassetto','fag.picc','recorder','sordun','pipe and tabor'],
+      members:['fag','fl','ob','bombarde','fiffaro','crummhorn','ciaramella','cl','schryari','cor di bassetto','fag.picc','recorder','sordun','pipe and tabor','tenorete']
+    },
+    {
+      id:'bowed',
+      title:'Bowed strings',
+      anyKey:'__st_any_bowed__',
+      anyLabel:'Any bowed string',
+      codes:['vl','vlne','vla','vlc','violetta','vla da gamba','lirone','lira','strings','bassetto','ribecchino'],
+      members:['vl','vlne','vla','vlc','violetta','vla da gamba','lirone','lira','strings','bassetto','ribecchino']
+    },
+    {
+      id:'plucked',
+      title:'Plucked strings',
+      anyKey:'__st_any_plucked__',
+      anyLabel:'Any plucked string',
+      codes:['theorbe','lute','arp','cetra','colascione','mandoline','salterio','cimb'],
+      members:['theorbe','lute','arp','cetra','colascione','mandoline','salterio','cimb']
+    },
+    {
+      id:'continuo',
+      title:'Continuo',
+      anyKey:'__st_any_continuo__',
+      anyLabel:'Any continuo',
+      codes:['org','bc','positif','cemb','theorbe','lute','arp','cetra','regal','spinetta','pf','tab'],
+      members:['org','bc','positif','cemb','theorbe','lute','arp','cetra','regal','spinetta','pf','tab']
+    },
+    {
+      id:'percussion',
+      title:'Percussion',
+      anyKey:'__st_any_percussion__',
+      anyLabel:'Any percussion',
+      codes:['timp','tamb','pipe and tabor'],
+      members:['timp','tamb','pipe and tabor']
+    }
+  ];
+
+  const SEARCH_TOOL_SYNTH_DISPLAY = new Map();
+  const SEARCH_TOOL_RULE_MEMBERS = new Map();
+
+  function uniqueCodes(codes){
+    return Array.from(new Set((codes || []).filter(Boolean)));
+  }
+
+  function setRuleMembers(key, codes){
+    SEARCH_TOOL_RULE_MEMBERS.set(key, uniqueCodes(codes));
+  }
+
+  SEARCH_TOOL_CATEGORIES.forEach(cat => {
+    SEARCH_TOOL_SYNTH_DISPLAY.set(cat.anyKey, cat.anyLabel);
+    setRuleMembers(cat.anyKey, cat.members);
+  });
+
+  // Uncertain / family-aware rules:
+  // V may be any specific voice; i may be any specific generic instrument.
+  ['S','A','T','Bariton','B'].forEach(k => setRuleMembers(k, [k,'V']));
+  ['s','a','t','b'].forEach(k => setRuleMembers(k, [k,'i']));
+
+  // "Fagotto" is intentionally broad: it also finds piccolo fagotto and the
+  // still-unresolved tenorete. Their individual rows remain exact.
+  setRuleMembers('fag', ['fag','fag.picc','tenorete']);
 
   function updateInstrumentationExpanded(){
-    document.body.classList.toggle(
-      'instrumentation-expanded',
-      !!(instrumentationSection && instrumentationSection.open)
-    );
+    const isOpen = !!(instrumentationSection && instrumentationSection.open);
+    document.body.classList.toggle('instrumentation-expanded', isOpen);
+    if(isOpen) ensureInstrumentToolBuilt();
   }
 
   if(instrumentationSection){
@@ -4378,17 +4534,11 @@ index_template = """<!doctype html>
   }
 
   function searchToolDisplay(k){
-    if(k === CORNETTO_FAMILY_KEY) return 'Any cornetto';
-    return SEARCH_TOOL_DISPLAY.get(k) || k;
+    return SEARCH_TOOL_SYNTH_DISPLAY.get(k) || SEARCH_TOOL_DISPLAY.get(k) || k;
   }
 
   function searchToolCodeLabel(k){
-    if(k === CORNETTO_FAMILY_KEY) return 'family';
-    return k;
-  }
-
-  function isCornettoFamilyCode(k){
-    return CORNETTO_FAMILY_CODES.includes(k);
+    return SEARCH_TOOL_SYNTH_DISPLAY.has(k) ? 'category' : k;
   }
 
   function stRuleFor(k){
@@ -4409,7 +4559,7 @@ index_template = """<!doctype html>
   }
 
   function stCountFor(k){
-    if(k === CORNETTO_FAMILY_KEY) return '';
+    if(SEARCH_TOOL_SYNTH_DISPLAY.has(k)) return '';
     const opt = stOptionByKey(k);
     return opt && opt.n ? String(opt.n) : '';
   }
@@ -4444,31 +4594,6 @@ index_template = """<!doctype html>
     return `${sign} ${cmp} ${rule.n}`;
   }
 
-  function instrumentRuleLine(obj){
-    const k = obj.k;
-    const rule = stRuleFor(k);
-    const display = searchToolDisplay(k);
-    const code = searchToolCodeLabel(k);
-    const title = k === CORNETTO_FAMILY_KEY ? display : `${display} [${code}]`;
-    const pillClass = rule.active
-      ? (rule.mode === 'exclude' ? 'instrument-rule-pill exclude' : 'instrument-rule-pill include')
-      : 'instrument-rule-pill';
-    const cmp = rule.cmp === 'eq' ? '=' : '≥';
-    const count = stCountFor(k);
-
-    return `
-      <div class="instrument-rule-line" data-st-rule="${escapeHtmlAttr(k)}">
-        <button type="button" class="${pillClass}" data-st-cycle title="inactive → include → exclude → inactive">${stRulePillText(rule)}</button>
-        <div class="instrument-rule-name" title="${escapeHtmlAttr(title)}">${escapeHtmlText(display)}</div>
-        <div class="instrument-rule-controls">
-          <button type="button" class="instrument-operator-btn" data-st-cmp title="Toggle ≥ / =">${cmp}</button>
-          <button type="button" class="instrument-qty-btn" data-st-minus title="Decrease quantity">−</button>
-          <button type="button" class="instrument-qty-btn" data-st-plus title="Increase quantity">+</button>
-          <span class="instrument-rule-count">${escapeHtmlText(count)}</span>
-        </div>
-      </div>`;
-  }
-
   function escapeHtmlText(s){
     return String(s || '').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
   }
@@ -4477,73 +4602,207 @@ index_template = """<!doctype html>
     return escapeHtmlText(s).replace(/"/g, '&quot;');
   }
 
+  function categoryOptions(cat){
+    const options = cat.codes
+      .map(k => stOptionByKey(k))
+      .filter(Boolean);
+
+    if(!cat.fixed){
+      options.sort(compareBrowseOptions);
+    }
+    return options;
+  }
+
+  function instrumentRuleLine(obj, catTitle=''){
+    const k = obj.k;
+    const rule = stRuleFor(k);
+    const display = searchToolDisplay(k);
+    const code = searchToolCodeLabel(k);
+    const title = SEARCH_TOOL_SYNTH_DISPLAY.has(k) ? display : `${display} [${code}]`;
+    const pillClass = rule.active
+      ? (rule.mode === 'exclude' ? 'instrument-rule-pill exclude' : 'instrument-rule-pill include')
+      : 'instrument-rule-pill';
+    const cmp = rule.cmp === 'eq' ? '=' : '≥';
+    const count = stCountFor(k);
+    const searchText = `${catTitle} ${display} ${code}`.toLowerCase();
+
+    return `
+      <div class="instrument-rule-line" data-st-rule="${escapeHtmlAttr(k)}" data-st-search="${escapeHtmlAttr(searchText)}">
+        <button type="button" class="${pillClass}" data-st-action="cycle" title="inactive → include → exclude → inactive">${stRulePillText(rule)}</button>
+        <div class="instrument-rule-name" title="${escapeHtmlAttr(title)}">${escapeHtmlText(display)}</div>
+        <div class="instrument-rule-controls">
+          <button type="button" class="instrument-operator-btn" data-st-action="cmp" title="Toggle ≥ / =">${cmp}</button>
+          <button type="button" class="instrument-qty-btn" data-st-action="minus" title="Decrease quantity">−</button>
+          <button type="button" class="instrument-qty-btn" data-st-action="plus" title="Increase quantity">+</button>
+          <span class="instrument-rule-count">${escapeHtmlText(count)}</span>
+        </div>
+      </div>`;
+  }
+
+  function buildInstrumentTool(){
+    if(instrumentToolBuilt || !instrumentCategoryList) return;
+
+    const blocks = [];
+
+    SEARCH_TOOL_CATEGORIES.forEach(cat => {
+      const options = categoryOptions(cat);
+      if(!options.length) return;
+
+      const anyObj = {k:cat.anyKey, d:cat.anyLabel, n:''};
+      const rows = [instrumentRuleLine(anyObj, cat.title)]
+        .concat(options.map(obj => instrumentRuleLine(obj, cat.title)))
+        .join('');
+
+      blocks.push(`
+        <section class="instrument-category-block" data-st-category="${escapeHtmlAttr(cat.id)}" data-st-category-title="${escapeHtmlAttr(cat.title.toLowerCase())}">
+          <h3 class="instrument-category-title">${escapeHtmlText(cat.title)}</h3>
+          <div class="instrument-rule-list">${rows}</div>
+        </section>`);
+    });
+
+    instrumentCategoryList.innerHTML = blocks.length
+      ? blocks.join('')
+      : '<div class="instrument-tool-placeholder">No grouped instrument codes found.</div>';
+
+    instrumentToolBuilt = true;
+    filterInstrumentRuleRows();
+  }
+
+  function ensureInstrumentToolBuilt(){
+    if(!instrumentToolBuilt) buildInstrumentTool();
+  }
+
+  function updateInstrumentRuleRows(k){
+    if(!instrumentToolBuilt || !instrumentCategoryList) return;
+    const rule = stRuleFor(k);
+    const pillClass = rule.active
+      ? (rule.mode === 'exclude' ? 'instrument-rule-pill exclude' : 'instrument-rule-pill include')
+      : 'instrument-rule-pill';
+    const cmp = rule.cmp === 'eq' ? '=' : '≥';
+
+    instrumentCategoryList.querySelectorAll('[data-st-rule]').forEach(line => {
+      if(line.getAttribute('data-st-rule') !== k) return;
+      const pill = line.querySelector('[data-st-action="cycle"]');
+      const cmpBtn = line.querySelector('[data-st-action="cmp"]');
+      if(pill){
+        pill.className = pillClass;
+        pill.textContent = stRulePillText(rule);
+      }
+      if(cmpBtn) cmpBtn.textContent = cmp;
+    });
+  }
+
   function renderInstrumentRuleLists(){
-    if(!cornettoRuleList || !otherInstrumentRuleList) return;
+    if(!instrumentToolBuilt || !instrumentCategoryList) return;
+    const keys = new Set();
+    instrumentCategoryList.querySelectorAll('[data-st-rule]').forEach(line => {
+      keys.add(line.getAttribute('data-st-rule'));
+    });
+    keys.forEach(k => updateInstrumentRuleRows(k));
+    filterInstrumentRuleRows();
+  }
 
-    const cornettoKnown = SEARCH_TOOL_INSTRS.filter(o => isCornettoFamilyCode(o.k));
-    const familyOptions = cornettoKnown.length
-      ? [{k:CORNETTO_FAMILY_KEY, d:'Any cornetto', n:''}, ...cornettoKnown]
-      : [];
-
-    cornettoRuleList.innerHTML = familyOptions.length
-      ? familyOptions.map(instrumentRuleLine).join('')
-      : '<div class="field-hint">No cornetto-family codes found in the Search Tool column.</div>';
-
+  function filterInstrumentRuleRows(){
+    if(!instrumentToolBuilt || !instrumentCategoryList) return;
     const q = normalizeLoose(stOtherFilter ? stOtherFilter.value : '');
-    const otherOptions = SEARCH_TOOL_INSTRS
-      .filter(o => !isCornettoFamilyCode(o.k))
-      .filter(o => {
-        if(!q) return true;
-        return normalizeLoose(o.k).includes(q) || normalizeLoose(o.d || '').includes(q);
-      })
-      .sort(compareBrowseOptions);
 
-    otherInstrumentRuleList.innerHTML = otherOptions.map(instrumentRuleLine).join('');
+    instrumentCategoryList.querySelectorAll('.instrument-category-block').forEach(block => {
+      const catTitle = normalizeLoose(block.getAttribute('data-st-category-title') || '');
+      const categoryMatch = !!q && catTitle.includes(q);
+      let visibleRows = 0;
 
-    document.querySelectorAll('[data-st-rule]').forEach(line => {
+      block.querySelectorAll('[data-st-rule]').forEach(line => {
+        const hay = normalizeLoose(line.getAttribute('data-st-search') || '');
+        const visible = !q || categoryMatch || hay.includes(q);
+        line.hidden = !visible;
+        if(visible) visibleRows++;
+      });
+
+      block.classList.toggle('is-filtered-out', visibleRows === 0);
+    });
+  }
+
+  if(instrumentCategoryList){
+    instrumentCategoryList.addEventListener('click', ev => {
+      const btn = ev.target.closest('[data-st-action]');
+      if(!btn) return;
+      const line = btn.closest('[data-st-rule]');
+      if(!line) return;
+
       const k = line.getAttribute('data-st-rule');
       const rule = stRuleFor(k);
+      const action = btn.getAttribute('data-st-action');
 
-      const cycle = line.querySelector('[data-st-cycle]');
-      const cmpBtn = line.querySelector('[data-st-cmp]');
-      const minus = line.querySelector('[data-st-minus]');
-      const plus = line.querySelector('[data-st-plus]');
+      if(action === 'cycle') cycleStMode(rule);
+      else if(action === 'cmp') toggleStCmp(rule);
+      else if(action === 'minus') changeStQty(rule, -1);
+      else if(action === 'plus') changeStQty(rule, 1);
+      else return;
 
-      if(cycle) cycle.addEventListener('click', () => {
-        cycleStMode(rule);
-        renderStRules();
-        renderInstrumentRuleLists();
-        applyFilters();
-      });
-
-      if(cmpBtn) cmpBtn.addEventListener('click', () => {
-        toggleStCmp(rule);
-        renderStRules();
-        renderInstrumentRuleLists();
-        applyFilters();
-      });
-
-      if(minus) minus.addEventListener('click', () => {
-        changeStQty(rule, -1);
-        renderStRules();
-        renderInstrumentRuleLists();
-        applyFilters();
-      });
-
-      if(plus) plus.addEventListener('click', () => {
-        changeStQty(rule, 1);
-        renderStRules();
-        renderInstrumentRuleLists();
-        applyFilters();
-      });
+      updateInstrumentRuleRows(k);
+      renderStRules();
+      applyFilters();
     });
   }
 
   if(stOtherFilter){
-    stOtherFilter.addEventListener('input', () => {
-      renderInstrumentRuleLists();
+    stOtherFilter.addEventListener('input', filterInstrumentRuleRows);
+  }
+
+  function renderStRules(){
+    stActive.innerHTML = '';
+    const rules = activeStRules();
+
+    if(!rules.length){
+      const empty = document.createElement('div');
+      empty.className = 'field-hint';
+      empty.textContent = 'No active instrument rules.';
+      stActive.appendChild(empty);
+      return;
+    }
+
+    rules.forEach(r => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'active-filter-chip';
+      if(r.mode === 'exclude') chip.classList.add('exclude-chip');
+      chip.setAttribute('data-st-clear-key', r.k);
+      const sign = r.mode === 'include' ? '+' : '–';
+      const cmp = r.cmp === 'eq' ? '=' : '≥';
+      chip.textContent = `${sign} ${cmp} ${r.n} ${searchToolDisplay(r.k)} ×`;
+      chip.title = 'Click to remove';
+      stActive.appendChild(chip);
     });
   }
+
+  if(stActive){
+    stActive.addEventListener('click', ev => {
+      const chip = ev.target.closest('[data-st-clear-key]');
+      if(!chip) return;
+      const k = chip.getAttribute('data-st-clear-key');
+      const rule = stRuleFor(k);
+      rule.active = false;
+      updateInstrumentRuleRows(k);
+      renderStRules();
+      applyFilters();
+    });
+  }
+
+  if(stClear){
+    stClear.addEventListener('click', () => {
+      stRules.forEach(rule => {
+        rule.active = false;
+        rule.mode = 'include';
+        rule.cmp = 'ge';
+        rule.n = 1;
+      });
+      renderStRules();
+      renderInstrumentRuleLists();
+      applyFilters();
+    });
+  }
+
+  renderStRules();
 
   function closeInstrMenu(){
     if(!instrMenu) return;
@@ -5191,8 +5450,9 @@ index_template = """<!doctype html>
   }
 
   function searchToolScenarioValue(sc, key){
-    if(key === CORNETTO_FAMILY_KEY){
-      return CORNETTO_FAMILY_CODES.reduce((total, code) => total + (sc[code] || 0), 0);
+    const members = SEARCH_TOOL_RULE_MEMBERS.get(key);
+    if(members && members.length){
+      return members.reduce((total, code) => total + (sc[code] || 0), 0);
     }
     return sc[key] || 0;
   }
@@ -5869,7 +6129,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v28-collection-index-filter-fix-2026-07-02">
+  <link rel="stylesheet" href="style.css?v=detail-v29-grouped-instrument-search-2026-07-02">
 </head>
 <body>
 @@HEADER@@
@@ -6058,6 +6318,10 @@ def main():
         present = set()
         for sc in scs:
             for k in sc.keys():
+                # Removed residual data error: "Sinf vl" was a malformed label,
+                # not an instrument code.
+                if k == "Sinf vl":
+                    continue
                 all_instr.add(k)
                 present.add(k)
         for k in present:
