@@ -34,6 +34,9 @@
 # - v29 grouped instrument search: short always-visible categories, selectable
 #   category-wide rules, one filter-column scroll, lazy first-open rendering,
 #   event delegation, and safe alias/uncertainty matching.
+# - v30 grouped-search refinements: browsable composer list, category guide,
+#   hidden indeterminate voice/instrument rows, expanded lexicon/categories,
+#   automatic unclassified-code fallback, and safe lazy-render cleanup.
 
 import re, html, shutil, json
 from pathlib import Path
@@ -124,6 +127,8 @@ INSTRUMENT_SEARCH_LABELS = {
     "bassetto": "Bassetto",
     "bc": "Basso continuo",
     "bombarde": "Bombarde",
+    "bugle": "Bugle",
+    "cb": "Contrabasso",
     "cemb": "Cembalo",
     "cetra": "Cetra",
     "ciaramella": "Ciaramella",
@@ -140,9 +145,12 @@ INSTRUMENT_SEARCH_LABELS = {
     "cornettino": "Cornettino",
     "crummhorn": "Crummhorn",
     "dolzaine": "Dolzaine",
+    "dolzano": "Dolzano",
     "fag": "Fagotto",
     "fag.picc": "Fagotto piccolo",
     "fiffaro": "Fiffaro",
+    "gong": "Gong",
+    "grancassa": "Gran cassa",
     "fl": "Flauto",
     "i": "Instrument",
     "lira": "Lira",
@@ -154,23 +162,29 @@ INSTRUMENT_SEARCH_LABELS = {
     "org": "Organo",
     "pf": "Pianoforte",
     "pipe and tabor": "Pipe and Tabor",
+    "piatti": "Piatti",
     "positif": "Positive organ",
     "recorder": "Recorder",
     "regal": "Regal",
     "ribecchino": "Ribecchino",
     "s": "Soprano voice",
     "salterio": "Salterio",
+    "sax": "Saxophone",
+    "saxhorn": "Saxhorn",
     "schryari": "Schryari",
     "serpent": "Serpent",
+    "sordone": "Sordone",
     "sordun": "Sordun",
     "spinetta": "Spinetta",
     "tab": "Tablature",
+    "tam-tam": "Tam-tam",
     "strings": "Strings",
     "t": "Tenor voice",
     "tamb": "Tamburro",
     "tb": "Tuba",
     "tenorete": "Tenorete",
     "theorbe": "Theorbe",
+    "triangolo": "Triangolo",
     "timp": "Timpanum",
     "tr": "Trumpet",
     "trb": "Trombone",
@@ -1932,6 +1946,45 @@ body.index-page .catalogue-card{
 }
 
 
+/* v30 category guide: short, sticky navigation inside the single
+   Search & filters scroll column. It does not create a nested scroll area. */
+.instrument-category-guide{
+  position:sticky;
+  top:0;
+  z-index:18;
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+  padding:5px 4px 7px;
+  margin:-2px -2px 1px;
+  background:linear-gradient(180deg,#fff 82%,rgba(255,255,255,.93));
+  border-bottom:1px solid rgba(208,213,235,.78);
+}
+
+.instrument-category-guide:empty{
+  display:none;
+}
+
+.instrument-category-guide button{
+  appearance:none;
+  border:1px solid #d0d5eb;
+  background:#fff;
+  color:#4b5563;
+  border-radius:999px;
+  padding:3px 7px;
+  font:inherit;
+  font-size:.66rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-category-guide button:hover,
+.instrument-category-guide button.is-current{
+  border-color:#8fa0c5;
+  background:#eaf0fb;
+  color:#243b6b;
+}
+
 /* v29 grouped instrument Search Tool */
 .instrument-category-list{
   display:flex;
@@ -3637,7 +3690,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v29-grouped-instrument-search-2026-07-02">
+  <link rel="stylesheet" href="style.css?v=detail-v30-grouped-search-refinements-2026-07-05">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -3676,7 +3729,7 @@ index_template = """<!doctype html>
             <div class="section-body">
               <div class="filter-field" style="position:relative;">
                 <label for="composerInput">Composer</label>
-                <input id="composerInput" type="text" placeholder="Type: von, moritz, hessen…" autocomplete="off" />
+                <input id="composerInput" type="text" placeholder="Browse composers…" autocomplete="off" />
                 <div class="composer-menu" id="composerMenu">
                   <div class="composer-list" id="composerList"></div>
                 </div>
@@ -3726,6 +3779,7 @@ index_template = """<!doctype html>
               <div class="filter-field search-tool-field">
                 <label>Search Tool</label>
                 <div class="instrument-tool-panel" id="instrumentToolPanel">
+                  <nav class="instrument-category-guide" id="instrumentCategoryGuide" aria-label="Instrument categories"></nav>
                   <input id="stOtherFilter" class="instrument-filter-input" type="text" placeholder="Filter instruments…" autocomplete="off" />
                   <div class="instrument-category-list" id="instrumentCategoryList"></div>
 
@@ -4375,7 +4429,11 @@ index_template = """<!doctype html>
 
   function computeComposerHits(){
     const qWords = wordsOnly(composerInput.value);
-    if(!qWords.length) return [];
+
+    // v30: the full alphabetic list is browseable on focus, even with an
+    // empty field. Typing still narrows the list normally.
+    if(!qWords.length) return COMPOSERS.slice();
+
     const hits = [];
     for(const obj of COMPOSERS){
       const t = obj.t || '';
@@ -4383,10 +4441,7 @@ index_template = """<!doctype html>
       for(const w of qWords){
         if(!t.includes(w)){ ok = false; break; }
       }
-      if(ok){
-        hits.push(obj);
-        if(hits.length >= 25) break;
-      }
+      if(ok) hits.push(obj);
     }
     return hits;
   }
@@ -4406,10 +4461,11 @@ index_template = """<!doctype html>
     if(hits.length) openComposerMenu(hits);
   });
 
-  // ============ Search Tool controls — v29 grouped, lazy and delegated
+  // ============ Search Tool controls — v30 grouped, guided, lazy and delegated
   const instrumentationSection = document.getElementById('instrumentationSection');
   const instrumentToolPanel = document.getElementById('instrumentToolPanel');
   const instrumentCategoryList = document.getElementById('instrumentCategoryList');
+  const instrumentCategoryGuide = document.getElementById('instrumentCategoryGuide');
   const stOtherFilter = document.getElementById('stOtherFilter');
   const stClear = document.getElementById('stClear');
   const stActive = document.getElementById('stActive');
@@ -4419,81 +4475,62 @@ index_template = """<!doctype html>
   const stRules = [];
   let instrumentToolBuilt = false;
 
+  const EXTRA_VOICE_CODES = Array.from({length:12}, (_, i) => `V ${i + 5}`);
+
   const SEARCH_TOOL_CATEGORIES = [
     {
-      id:'cornetto',
-      title:'Cornetto',
-      anyKey:'__st_any_cornetto__',
-      anyLabel:'Any cornetto',
-      fixed:true,
+      id:'cornetto', guide:'Cornetto', title:'Cornetto',
+      anyKey:'__st_any_cornetto__', anyLabel:'Any cornetto', fixed:true,
       codes:['cnto','cornettino','cnto muto','cornetto muto'],
       members:['cnto','cornettino','cnto muto','cornetto muto']
     },
     {
-      id:'voices',
-      title:'Voices',
-      anyKey:'__st_any_voice__',
-      anyLabel:'Any voice',
-      fixed:true,
-      codes:['S','A','T','Bariton','B','V 5','V'],
-      members:['S','A','T','Bariton','B','V 5','V']
+      id:'voices', guide:'Voices', title:'Voices',
+      anyKey:'__st_any_voice__', anyLabel:'Any voice', fixed:true,
+      codes:['S','A','T','Bariton','B'],
+      members:['S','A','T','Bariton','B','V', ...EXTRA_VOICE_CODES]
     },
     {
-      id:'generic',
-      title:'Generic parts',
-      anyKey:'__st_any_generic__',
-      anyLabel:'Any generic part',
-      fixed:true,
-      codes:['s','a','t','tenorete','b','i'],
+      id:'generic', guide:'Generic', title:'Generic parts',
+      anyKey:'__st_any_generic__', anyLabel:'Any generic part', fixed:true,
+      codes:['s','a','t','tenorete','b'],
       members:['s','a','t','tenorete','b','i']
     },
     {
-      id:'brass',
-      title:'Brass',
-      anyKey:'__st_any_brass__',
-      anyLabel:'Any brass',
-      codes:['trb','tr','cor','cor da caccia','clno','lituus','serpent','tb'],
-      members:['trb','tr','cor','cor da caccia','clno','lituus','serpent','tb']
+      id:'brass', guide:'Brass', title:'Brass',
+      anyKey:'__st_any_brass__', anyLabel:'Any brass',
+      codes:['trb','tr','cor','cor da caccia','clno','lituus','serpent','tb','bugle','saxhorn'],
+      members:['trb','tr','cor','cor da caccia','clno','lituus','serpent','tb','bugle','saxhorn','tenorete']
     },
     {
-      id:'woodwinds',
-      title:'Woodwinds',
-      anyKey:'__st_any_woodwind__',
-      anyLabel:'Any woodwind',
-      codes:['fag','fl','ob','bombarde','fiffaro','crummhorn','ciaramella','cl','schryari','cor di bassetto','fag.picc','recorder','sordun','pipe and tabor'],
-      members:['fag','fl','ob','bombarde','fiffaro','crummhorn','ciaramella','cl','schryari','cor di bassetto','fag.picc','recorder','sordun','pipe and tabor','tenorete']
+      id:'woodwinds', guide:'Woodwinds', title:'Woodwinds',
+      anyKey:'__st_any_woodwind__', anyLabel:'Any woodwind',
+      codes:['fag','fl','ob','bombarde','fiffaro','crummhorn','ciaramella','cl','schryari','cor di bassetto','fag.picc','recorder','sordun','dolzano','sordone','sax','pipe and tabor'],
+      members:['fag','fl','ob','bombarde','fiffaro','crummhorn','ciaramella','cl','schryari','cor di bassetto','fag.picc','recorder','sordun','dolzano','sordone','sax','pipe and tabor','tenorete']
     },
     {
-      id:'bowed',
-      title:'Bowed strings',
-      anyKey:'__st_any_bowed__',
-      anyLabel:'Any bowed string',
-      codes:['vl','vlne','vla','vlc','violetta','vla da gamba','lirone','lira','strings','bassetto','ribecchino'],
-      members:['vl','vlne','vla','vlc','violetta','vla da gamba','lirone','lira','strings','bassetto','ribecchino']
+      id:'bowed', guide:'Bowed', title:'Bowed strings',
+      anyKey:'__st_any_bowed__', anyLabel:'Any bowed string',
+      codes:['vl','vlne','vla','vlc','cb','violetta','vla da gamba','lirone','lira','strings','bassetto','ribecchino'],
+      members:['vl','vlne','vla','vlc','cb','violetta','vla da gamba','lirone','lira','strings','bassetto','ribecchino']
     },
     {
-      id:'plucked',
-      title:'Plucked strings',
-      anyKey:'__st_any_plucked__',
-      anyLabel:'Any plucked string',
+      id:'plucked', guide:'Plucked', title:'Plucked strings',
+      anyKey:'__st_any_plucked__', anyLabel:'Any plucked string',
       codes:['theorbe','lute','arp','cetra','colascione','mandoline','salterio','cimb'],
       members:['theorbe','lute','arp','cetra','colascione','mandoline','salterio','cimb']
     },
     {
-      id:'continuo',
-      title:'Continuo',
-      anyKey:'__st_any_continuo__',
-      anyLabel:'Any continuo',
+      id:'continuo', guide:'Continuo', title:'Continuo',
+      anyKey:'__st_any_continuo__', anyLabel:'Any continuo',
       codes:['org','bc','positif','cemb','theorbe','lute','arp','cetra','regal','spinetta','pf','tab'],
       members:['org','bc','positif','cemb','theorbe','lute','arp','cetra','regal','spinetta','pf','tab']
     },
     {
-      id:'percussion',
-      title:'Percussion',
-      anyKey:'__st_any_percussion__',
-      anyLabel:'Any percussion',
-      codes:['timp','tamb','pipe and tabor'],
-      members:['timp','tamb','pipe and tabor']
+      id:'percussion', guide:'Percussion', title:'Percussion',
+      anyKey:'__st_any_percussion__', anyLabel:'Any percussion',
+      codes:['timp','tamb','grancassa','triangolo','piatti','gong','tam-tam','pipe and tabor'],
+      members:['timp','tamb','grancassa','triangolo','piatti','gong','tam-tam','pipe and tabor']
     }
   ];
 
@@ -4508,7 +4545,7 @@ index_template = """<!doctype html>
     SEARCH_TOOL_RULE_MEMBERS.set(key, uniqueCodes(codes));
   }
 
-  SEARCH_TOOL_CATEGORIES.forEach(cat => {
+  categoriesForCurrentData().forEach(cat => {
     SEARCH_TOOL_SYNTH_DISPLAY.set(cat.anyKey, cat.anyLabel);
     setRuleMembers(cat.anyKey, cat.members);
   });
@@ -4613,6 +4650,29 @@ index_template = """<!doctype html>
     return options;
   }
 
+  function categoriesForCurrentData(){
+    const categories = SEARCH_TOOL_CATEGORIES.map(cat => ({...cat}));
+    const assigned = new Set();
+    categories.forEach(cat => (cat.codes || []).forEach(k => assigned.add(k)));
+
+    // Any code newly appearing in the Google Sheet remains visible even before
+    // its full label/classification has been added to the lexicon.
+    const unclassified = SEARCH_TOOL_INSTRS
+      .filter(obj => !assigned.has(obj.k))
+      .sort(compareBrowseOptions);
+
+    if(unclassified.length){
+      categories.push({
+        id:'other', guide:'Other', title:'Other',
+        anyKey:'__st_any_other__', anyLabel:'Any other',
+        fixed:false,
+        codes:unclassified.map(obj => obj.k),
+        members:unclassified.map(obj => obj.k)
+      });
+    }
+    return categories;
+  }
+
   function instrumentRuleLine(obj, catTitle=''){
     const k = obj.k;
     const rule = stRuleFor(k);
@@ -4639,12 +4699,55 @@ index_template = """<!doctype html>
       </div>`;
   }
 
+  let categoryGuideObserver = null;
+
+  function buildCategoryGuide(categories){
+    if(!instrumentCategoryGuide) return;
+    instrumentCategoryGuide.innerHTML = categories.map(cat =>
+      `<button type="button" data-st-jump="${escapeHtmlAttr(cat.id)}">${escapeHtmlText(cat.guide || cat.title)}</button>`
+    ).join('');
+
+    instrumentCategoryGuide.addEventListener('click', ev => {
+      const btn = ev.target.closest('[data-st-jump]');
+      if(!btn) return;
+      const id = btn.getAttribute('data-st-jump');
+      const block = instrumentCategoryList.querySelector(`[data-st-category="${id}"]`);
+      if(block) block.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  }
+
+  function observeCurrentInstrumentCategory(){
+    if(categoryGuideObserver) categoryGuideObserver.disconnect();
+    if(!instrumentCategoryGuide || !instrumentCategoryList || !('IntersectionObserver' in window)) return;
+
+    const scroller = instrumentCategoryList.closest('.filters');
+    categoryGuideObserver = new IntersectionObserver(entries => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a,b) => Math.abs(a.boundingClientRect.top) - Math.abs(b.boundingClientRect.top));
+      if(!visible.length) return;
+      const id = visible[0].target.getAttribute('data-st-category');
+      instrumentCategoryGuide.querySelectorAll('[data-st-jump]').forEach(btn => {
+        btn.classList.toggle('is-current', btn.getAttribute('data-st-jump') === id);
+      });
+    }, {root:scroller || null, rootMargin:'-8px 0px -70% 0px', threshold:[0,.01]});
+
+    instrumentCategoryList.querySelectorAll('.instrument-category-block').forEach(block => {
+      categoryGuideObserver.observe(block);
+    });
+  }
+
   function buildInstrumentTool(){
     if(instrumentToolBuilt || !instrumentCategoryList) return;
 
     const blocks = [];
+    const renderedCategories = [];
 
-    SEARCH_TOOL_CATEGORIES.forEach(cat => {
+    categoriesForCurrentData().forEach(cat => {
+      // Register dynamic synthetic categories (notably the optional Other group).
+      SEARCH_TOOL_SYNTH_DISPLAY.set(cat.anyKey, cat.anyLabel);
+      setRuleMembers(cat.anyKey, cat.members);
+
       const options = categoryOptions(cat);
       if(!options.length) return;
 
@@ -4653,6 +4756,7 @@ index_template = """<!doctype html>
         .concat(options.map(obj => instrumentRuleLine(obj, cat.title)))
         .join('');
 
+      renderedCategories.push(cat);
       blocks.push(`
         <section class="instrument-category-block" data-st-category="${escapeHtmlAttr(cat.id)}" data-st-category-title="${escapeHtmlAttr(cat.title.toLowerCase())}">
           <h3 class="instrument-category-title">${escapeHtmlText(cat.title)}</h3>
@@ -4664,8 +4768,10 @@ index_template = """<!doctype html>
       ? blocks.join('')
       : '<div class="instrument-tool-placeholder">No grouped instrument codes found.</div>';
 
+    buildCategoryGuide(renderedCategories);
     instrumentToolBuilt = true;
     filterInstrumentRuleRows();
+    observeCurrentInstrumentCategory();
   }
 
   function ensureInstrumentToolBuilt(){
@@ -4857,46 +4963,6 @@ index_template = """<!doctype html>
     }
   }
 
-  function renderStRules(){
-    stActive.innerHTML = '';
-    const rules = activeStRules();
-
-    if(!rules.length){
-      const empty = document.createElement('div');
-      empty.className = 'field-hint';
-      empty.textContent = 'No active instrument rules.';
-      stActive.appendChild(empty);
-      return;
-    }
-
-    rules.forEach((r) => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'active-filter-chip';
-      if(r.mode === 'exclude') chip.classList.add('exclude-chip');
-      const sign = r.mode === 'include' ? '+' : '–';
-      const cmp = (r.cmp === 'eq') ? '=' : '≥';
-      chip.textContent = `${sign} ${cmp} ${r.n} ${searchToolDisplay(r.k)} ×`;
-      chip.title = 'Click to remove';
-      chip.addEventListener('click', () => {
-        r.active = false;
-        renderStRules();
-        renderInstrumentRuleLists();
-        applyFilters();
-      });
-      stActive.appendChild(chip);
-    });
-  }
-
-  stClear.addEventListener('click', () => {
-    stRules.length = 0;
-    renderStRules();
-    renderInstrumentRuleLists();
-    applyFilters();
-  });
-
-  renderStRules();
-  renderInstrumentRuleLists();
 
   // ============ Contextual manuscript detail filter
   function updateMsDetailVisibility() {
@@ -6129,7 +6195,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v29-grouped-instrument-search-2026-07-02">
+  <link rel="stylesheet" href="style.css?v=detail-v30-grouped-search-refinements-2026-07-05">
 </head>
 <body>
 @@HEADER@@
@@ -6333,10 +6399,15 @@ def main():
             return ""
         return instrument_search_label(code) or code
 
+    # Values used as indeterminate background matches must not clutter the
+    # visible Search Tool choices. They remain present in the encoded scenarios.
+    hidden_search_tool_codes = {"V", "i"} | {f"V {n}" for n in range(5, 17)}
+    visible_instr_sorted = [k for k in all_instr_sorted if k not in hidden_search_tool_codes]
+
     search_tool_js = json.dumps(
         [
             {"k": k, "d": instrument_search_display_compact(k), "n": int(instr_freq.get(k, 0))}
-            for k in all_instr_sorted
+            for k in visible_instr_sorted
         ],
         ensure_ascii=False
     )
