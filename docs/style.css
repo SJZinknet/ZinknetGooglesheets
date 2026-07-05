@@ -989,6 +989,45 @@ body.index-page .catalogue-card{
 }
 
 
+/* v30 category guide: short, sticky navigation inside the single
+   Search & filters scroll column. It does not create a nested scroll area. */
+.instrument-category-guide{
+  position:sticky;
+  top:0;
+  z-index:18;
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+  padding:5px 4px 7px;
+  margin:-2px -2px 1px;
+  background:linear-gradient(180deg,#fff 82%,rgba(255,255,255,.93));
+  border-bottom:1px solid rgba(208,213,235,.78);
+}
+
+.instrument-category-guide:empty{
+  display:none;
+}
+
+.instrument-category-guide button{
+  appearance:none;
+  border:1px solid #d0d5eb;
+  background:#fff;
+  color:#4b5563;
+  border-radius:999px;
+  padding:3px 7px;
+  font:inherit;
+  font-size:.66rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-category-guide button:hover,
+.instrument-category-guide button.is-current{
+  border-color:#8fa0c5;
+  background:#eaf0fb;
+  color:#243b6b;
+}
+
 /* v29 grouped instrument Search Tool */
 .instrument-category-list{
   display:flex;
