@@ -1,5 +1,7 @@
 # generator/build.py
 # ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
+# v31: replace the textual ZinkNET heading with the official cropped logo,
+#      while preserving the exact responsive h1 line height and header layout.
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
 # Current index/search features:
@@ -51,6 +53,7 @@ OUT_DIR = Path("docs")            # GitHub Pages: publish /docs
 ASSETS_SRC = Path("assets_src")   # put hem.png + rism.png here
 HEM_LOGO = "hem.png"
 RISM_LOGO = "rism.png"
+ZINKNET_LOGO = "zinknet.png"
 
 # Column names expected in the Google Sheet
 COL_ZINK = "ZINKNET NO."
@@ -914,9 +917,11 @@ def build_header_html():
             return ""
         return f'<img class="{cls}" src="assets/{html.escape(filename, quote=True)}" alt="{alt}">'
 
+    zinknet_img = logo_img(ZINKNET_LOGO, "ZinkNET", "zinknet-logo")
     hem_img = logo_img(HEM_LOGO, "HEM – Haute école de musique de Genève", "hem-logo")
     rism_img = logo_img(RISM_LOGO, "RISM", "rism-logo")
 
+    zinknet_block = zinknet_img if zinknet_img else "ZinkNET"
     hem_block = hem_img if hem_img else '<span class="logo-fallback">HEM</span>'
     rism_block = rism_img if rism_img else '<span class="logo-fallback logo-fallback--small">RISM</span>'
 
@@ -928,7 +933,7 @@ def build_header_html():
         <button id="mobileFilterToggle" class="mobile-filter-toggle" type="button" aria-label="Open filters" aria-controls="mobileFilterPanel" aria-expanded="false">
           <span></span><span></span><span></span>
         </button>
-        <h1>ZinkNET</h1>
+        <h1 class="brand-title">{zinknet_block}</h1>
       </div>
       <div class="tagline">Interactive catalogue for the Cornett Repertoire</div>
       <div class="meta-line">
@@ -1014,6 +1019,20 @@ h1{
   letter-spacing:-0.04em;
   font-weight:800;
   line-height:1.03;
+}
+
+.brand-title{
+  display:flex;
+  align-items:center;
+  min-width:0;
+}
+
+.zinknet-logo{
+  display:block;
+  width:auto;
+  height:1.03em;
+  max-width:none;
+  flex:0 0 auto;
 }
 
 .tagline{
@@ -3690,7 +3709,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v30-grouped-search-refinements-2026-07-05">
+  <link rel="stylesheet" href="style.css?v=detail-v31-zinknet-logo-2026-07-06">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -6195,7 +6214,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v30-grouped-search-refinements-2026-07-05">
+  <link rel="stylesheet" href="style.css?v=detail-v31-zinknet-logo-2026-07-06">
 </head>
 <body>
 @@HEADER@@
@@ -6245,6 +6264,8 @@ def main():
         shutil.copy(ASSETS_SRC / HEM_LOGO, assets_dir / HEM_LOGO)
     if (ASSETS_SRC / RISM_LOGO).exists():
         shutil.copy(ASSETS_SRC / RISM_LOGO, assets_dir / RISM_LOGO)
+    if (ASSETS_SRC / ZINKNET_LOGO).exists():
+        shutil.copy(ASSETS_SRC / ZINKNET_LOGO, assets_dir / ZINKNET_LOGO)
 
     df = pd.read_csv(SHEET_CSV_URL, dtype={COL_RISM_NO: "string"})
     df.columns = [str(c).replace("\r\n", "\n").strip() for c in df.columns]
