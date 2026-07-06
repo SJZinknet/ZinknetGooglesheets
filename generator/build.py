@@ -7,6 +7,8 @@
 # v33: aesthetic and functional redesign of the grouped Instrument Search Tool:
 #      explicit With/Without controls, Minimum/Exact mode, compact quantity stepper,
 #      sticky category guide with corrected scroll offsets, and live catalogue summary.
+# v34: hide Tenorete from all visible Search Tool rows while keeping it
+#      inside broad Generic/Woodwind/Brass, Fagotto and Trombone searches.
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
 # Current index/search features:
@@ -4133,7 +4135,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v33-instrument-search-design-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v34-hidden-tenorete-trombone-2026-07-06">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -4916,6 +4918,7 @@ index_template = """<!doctype html>
   let instrumentToolBuilt = false;
 
   const EXTRA_VOICE_CODES = Array.from({length:12}, (_, i) => `V ${i + 5}`);
+  const SEARCH_TOOL_HIDDEN_CODES = new Set(['tenorete']);
 
   const SEARCH_TOOL_CATEGORIES = [
     {
@@ -4933,7 +4936,7 @@ index_template = """<!doctype html>
     {
       id:'generic', guide:'Generic', title:'Generic parts',
       anyKey:'__st_any_generic__', anyLabel:'Any generic part', fixed:true,
-      codes:['s','a','t','tenorete','b'],
+      codes:['s','a','t','b'],
       members:['s','a','t','tenorete','b','i']
     },
     {
@@ -4995,9 +4998,10 @@ index_template = """<!doctype html>
   ['S','A','T','Bariton','B'].forEach(k => setRuleMembers(k, [k,'V']));
   ['s','a','t','b'].forEach(k => setRuleMembers(k, [k,'i']));
 
-  // "Fagotto" is intentionally broad: it also finds piccolo fagotto and the
-  // still-unresolved tenorete. Their individual rows remain exact.
+  // Tenorete remains hidden as an individual Search Tool row, but is retained
+  // inside the broad historical families where it is relevant.
   setRuleMembers('fag', ['fag','fag.picc','tenorete']);
+  setRuleMembers('trb', ['trb','tenorete']);
 
   function updateInstrumentationExpanded(){
     const isOpen = !!(instrumentationSection && instrumentationSection.open);
@@ -5090,7 +5094,7 @@ index_template = """<!doctype html>
     // Any code newly appearing in the Google Sheet remains visible even before
     // its full label/classification has been added to the lexicon.
     const unclassified = SEARCH_TOOL_INSTRS
-      .filter(obj => !assigned.has(obj.k))
+      .filter(obj => !assigned.has(obj.k) && !SEARCH_TOOL_HIDDEN_CODES.has(obj.k))
       .sort(compareBrowseOptions);
 
     if(unclassified.length){
@@ -6653,7 +6657,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v33-instrument-search-design-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v34-hidden-tenorete-trombone-2026-07-06">
 </head>
 <body>
 @@HEADER@@
