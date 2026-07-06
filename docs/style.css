@@ -59,6 +59,20 @@ h1{
   line-height:1.03;
 }
 
+.brand-title{
+  display:flex;
+  align-items:center;
+  min-width:0;
+}
+
+.zinknet-logo{
+  display:block;
+  width:auto;
+  height:1.03em;
+  max-width:none;
+  flex:0 0 auto;
+}
+
 .tagline{
   margin-top:2px;
   color:var(--muted);
