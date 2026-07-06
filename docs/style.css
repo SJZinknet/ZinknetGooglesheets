@@ -1089,6 +1089,289 @@ body.index-page .catalogue-card{
   font-size:.76rem;
 }
 
+/* v33 Instrument Search Tool — prototype design integrated functionally. */
+.search-tool-field{
+  border:0;
+  background:transparent;
+  border-radius:0;
+  padding:0;
+}
+
+.instrument-tool-panel{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.instrument-filter-input{
+  width:100%;
+  border-radius:10px;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  padding:7px 9px;
+  color:var(--text);
+  font-size:.78rem;
+  outline:none;
+  margin:0;
+}
+
+.instrument-category-guide{
+  position:sticky;
+  top:0;
+  z-index:18;
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  padding:7px 0 8px;
+  margin:0;
+  background:linear-gradient(#fff 82%,rgba(255,255,255,.94));
+  border-bottom:1px solid rgba(208,213,235,.82);
+}
+
+.instrument-category-guide button{
+  appearance:none;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  color:#536071;
+  border-radius:999px;
+  padding:4px 7px;
+  font:inherit;
+  font-size:.65rem;
+  line-height:1;
+  cursor:pointer;
+}
+
+.instrument-category-guide button:hover,
+.instrument-category-guide button.is-current{
+  background:#eef3fb;
+  color:#2d4d7e;
+  border-color:#cad6e8;
+  font-weight:700;
+}
+
+.instrument-category-list{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+
+.instrument-category-block{
+  border:0;
+  background:transparent;
+  border-radius:0;
+  padding:0;
+  margin:0 0 13px;
+  scroll-margin-top:72px;
+}
+
+.instrument-category-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 6px;
+  padding:0;
+  color:#44506a;
+  font-size:.69rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  line-height:1.1;
+}
+
+.instrument-category-title::after{
+  content:"";
+  flex:1;
+  height:1px;
+  background:var(--border-subtle);
+}
+
+.instrument-rule-list{
+  display:grid;
+  gap:5px;
+}
+
+.instrument-rule-line{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto auto;
+  align-items:center;
+  gap:6px;
+  padding:5px 6px 5px 8px;
+  border:1px solid var(--border-subtle);
+  border-radius:11px;
+  background:#fff;
+  min-height:34px;
+}
+
+.instrument-rule-line:hover{
+  border-color:#b7c1d3;
+  background:#fcfdff;
+}
+
+.instrument-rule-line.is-general{
+  background:#f7f9fc;
+  font-weight:700;
+}
+
+.instrument-rule-line.is-with{
+  border-color:#b9ddcf;
+}
+
+.instrument-rule-line.is-without{
+  border-color:#efc4cc;
+}
+
+.instrument-rule-name{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.77rem;
+  font-weight:650;
+  color:#1f2937;
+}
+
+.instrument-choice{
+  display:inline-flex;
+  border:1px solid var(--border-subtle);
+  border-radius:9px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.instrument-choice-btn{
+  appearance:none;
+  border:0;
+  border-right:1px solid var(--border-subtle);
+  background:#fff;
+  color:#717887;
+  padding:4px 7px;
+  font:inherit;
+  font-size:.65rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-choice-btn:last-child{
+  border-right:0;
+}
+
+.instrument-choice-btn.is-with{
+  background:#eaf7f2;
+  color:#176b58;
+  font-weight:700;
+}
+
+.instrument-choice-btn.is-without{
+  background:#fff0f3;
+  color:#9b2c43;
+  font-weight:700;
+}
+
+.instrument-mode-btn{
+  appearance:none;
+  min-width:54px;
+  text-align:center;
+  padding:4px 6px;
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  color:#687184;
+  background:#fff;
+  font:inherit;
+  font-size:.65rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-qty-control{
+  display:inline-flex;
+  align-items:center;
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.instrument-qty-btn-v33{
+  appearance:none;
+  min-width:23px;
+  border:0;
+  background:#fff;
+  color:#5f6776;
+  padding:4px 5px;
+  font:inherit;
+  font-size:.67rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-qty-value{
+  min-width:25px;
+  text-align:center;
+  padding:4px 5px;
+  border-left:1px solid var(--border-subtle);
+  border-right:1px solid var(--border-subtle);
+  color:#273247;
+  font-size:.67rem;
+  line-height:1.1;
+  font-weight:700;
+}
+
+.instrument-clear-btn{
+  align-self:flex-start;
+  margin-top:0;
+  padding:5px 9px !important;
+  font-size:.68rem !important;
+  font-weight:650;
+  background:#fff !important;
+  border-color:#d0d5eb !important;
+  color:#4b5563 !important;
+}
+
+.catalogue-heading-block{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.catalogue-active-rules{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+
+.catalogue-active-rules:empty{
+  display:none;
+}
+
+.catalogue-active-rules .active-filter-chip{
+  appearance:none;
+  border:0;
+  border-radius:999px;
+  padding:4px 7px;
+  background:#eaf7f2;
+  color:#176b58;
+  font:inherit;
+  font-size:.66rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.catalogue-active-rules .active-filter-chip.exclude-chip{
+  background:#fff0f3;
+  color:#9b2c43;
+}
+
+@media (max-width:700px){
+  .instrument-rule-line{
+    grid-template-columns:minmax(0,1fr) auto auto;
+  }
+  .instrument-qty-control{
+    grid-column:2 / 4;
+    justify-self:end;
+  }
+}
+
 /* Instrumentation simple-search dropdown */
 .instr-suggest-wrap{
   position:relative;
