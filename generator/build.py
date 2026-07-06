@@ -2,6 +2,8 @@
 # ZinkNET — GitHub Actions builder (Google Sheet -> static site in /docs)
 # v31: replace the textual ZinkNET heading with the official cropped logo,
 #      while preserving the exact responsive h1 line height and header layout.
+# v32: clickable links in Notes (labelled Markdown links and compact raw URLs),
+#      plus the shorter subtitle “Interactive catalogue for the Cornett”.
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
 # Current index/search features:
@@ -42,6 +44,7 @@
 
 import re, html, shutil, json
 from pathlib import Path
+from urllib.parse import urlsplit
 import pandas as pd
 
 # =========================
@@ -297,6 +300,124 @@ def escape_with_italics(text):
     for key, title in placeholders.items():
         esc = esc.replace(key, f"<em>{html.escape(title, quote=False)}</em>")
     return esc
+
+
+NOTE_MARKDOWN_LINK_RE = re.compile(
+    r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)",
+    flags=re.IGNORECASE,
+)
+NOTE_RAW_URL_RE = re.compile(
+    r"https?://[^\s<>\"']+",
+    flags=re.IGNORECASE,
+)
+
+
+def _safe_note_url(raw_url):
+    """Accept only absolute HTTP(S) URLs."""
+    url = clean_str(raw_url)
+    if not url:
+        return ""
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return url
+
+
+def _compact_note_url_label(url):
+    """Use a short domain label for a raw URL."""
+    try:
+        host = (urlsplit(url).hostname or "").strip().lower()
+    except ValueError:
+        host = ""
+    if host.startswith("www."):
+        host = host[4:]
+    return host or "External link"
+
+
+def _split_note_url_trailing_punctuation(raw_url):
+    """
+    Keep punctuation following a pasted URL outside the clickable anchor.
+    This intentionally handles the common editorial cases only.
+    """
+    url = raw_url
+    trailing = ""
+
+    while url and url[-1] in ".,;:!?":
+        trailing = url[-1] + trailing
+        url = url[:-1]
+
+    # Closing brackets are usually sentence punctuation rather than part of the URL.
+    while url and url[-1] in ")]}":
+        opener = {")": "(", "]": "[", "}": "{"}[url[-1]]
+        if url.count(opener) >= url.count(url[-1]):
+            break
+        trailing = url[-1] + trailing
+        url = url[:-1]
+
+    return url, trailing
+
+
+def format_note_html(text):
+    """
+    Safe mixed text/link rendering for the Note column.
+
+    Supported:
+      [descriptive label](https://example.org/page)
+      https://example.org/very/long/page
+
+    Raw URLs are displayed compactly as their domain. Other text remains plain text.
+    HTML typed in Google Sheets is always escaped.
+    """
+    source = clean_str(text)
+    if not source:
+        return ""
+
+    links = []
+
+    def store_link(url, label):
+        safe_url = _safe_note_url(url)
+        if not safe_url:
+            return None
+        token = f"ZZZNOTEURLTOKEN{len(links)}ZZZ"
+        links.append((token, safe_url, clean_str(label)))
+        return token
+
+    # First protect labelled Markdown links so their URL is not processed twice.
+    def replace_markdown(match):
+        label = match.group(1)
+        url = match.group(2)
+        token = store_link(url, label)
+        return token if token else match.group(0)
+
+    protected = NOTE_MARKDOWN_LINK_RE.sub(replace_markdown, source)
+
+    # Then convert remaining raw URLs.
+    def replace_raw(match):
+        raw = match.group(0)
+        url, trailing = _split_note_url_trailing_punctuation(raw)
+        token = store_link(url, _compact_note_url_label(url))
+        return (token + trailing) if token else raw
+
+    protected = NOTE_RAW_URL_RE.sub(replace_raw, protected)
+
+    rendered = html.escape(protected, quote=False).replace("\n", "<br>")
+
+    for token, url, label in links:
+        visible = html.escape(label or _compact_note_url_label(url), quote=False)
+        anchor_html = (
+            f'<a class="detail-note-link-v32" '
+            f'href="{html.escape(url, quote=True)}" '
+            f'title="{html.escape(url, quote=True)}" '
+            f'target="_blank" rel="noopener noreferrer">'
+            f'{visible}<span class="detail-note-link-icon-v32" aria-hidden="true">↗</span>'
+            f'</a>'
+        )
+        rendered = rendered.replace(token, anchor_html)
+
+    return rendered
 
 def strip_see_rism(text):
     s = clean_str(text)
@@ -935,7 +1056,7 @@ def build_header_html():
         </button>
         <h1 class="brand-title">{zinknet_block}</h1>
       </div>
-      <div class="tagline">Interactive catalogue for the Cornett Repertoire</div>
+      <div class="tagline">Interactive catalogue for the Cornett</div>
       <div class="meta-line">
         <strong>Project director:</strong> Lambert Colson · <strong>Research assistants:</strong> Tim Meulenbeld, Sushaant Jaccard
       </div>
@@ -3364,6 +3485,23 @@ details.rism > summary::-webkit-details-marker{display:none}
 .detail-doc-v10 summary{list-style:none;padding:9px 12px;color:#374151;font-weight:700;font-size:.86rem;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:default;}
 .detail-doc-v10 summary::-webkit-details-marker{display:none;}
 .detail-doc-body-v10{border-top:1px solid #e1e5f5;padding:10px 12px;font-size:.86rem;color:#1f2937;line-height:1.36;overflow-wrap:anywhere;}
+.detail-note-link-v32{
+  color:#245ba5;
+  text-decoration:none;
+  border-bottom:1px solid rgba(36,91,165,.34);
+  font-weight:600;
+  overflow-wrap:anywhere;
+}
+.detail-note-link-v32:hover,
+.detail-note-link-v32:focus-visible{
+  color:#173f7b;
+  border-bottom-color:currentColor;
+}
+.detail-note-link-icon-v32{
+  margin-left:.18em;
+  font-size:.78em;
+  vertical-align:.12em;
+}
 .detail-doc-subtitle-v10{font-size:.70rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:760;margin:0 0 4px;}
 .detail-doc-subtitle-v10:not(:first-child){margin-top:10px;}
 .detail-content-section-v10{margin-top:10px;border-top:1px solid #e1e5f5;padding-top:9px;}
@@ -3709,7 +3847,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v31-zinknet-logo-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v32-note-links-short-subtitle-2026-07-06">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -6214,7 +6352,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v31-zinknet-logo-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v32-note-links-short-subtitle-2026-07-06">
 </head>
 <body>
 @@HEADER@@
@@ -6340,7 +6478,7 @@ def main():
         rec["library"] = escape_textnode(rec["library_raw"])
         rec["shelfmark"] = escape_textnode(rec["shelfmark_raw"])
         rec["category"] = escape_textnode(rec["category_raw"])
-        rec["note"] = escape_textnode(rec["note_raw"])
+        rec["note"] = format_note_html(rec["note_raw"])
         # Organology is a separate system, not the instrumentation code system.
         # v25: do not apply instrumentation-code labels/tooltips here.
         rec["organology"] = escape_textnode(rec["organology_raw"])
