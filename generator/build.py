@@ -4,6 +4,9 @@
 #      while preserving the exact responsive h1 line height and header layout.
 # v32: clickable links in Notes (labelled Markdown links and compact raw URLs),
 #      plus the shorter subtitle “Interactive catalogue for the Cornett”.
+# v33: aesthetic and functional redesign of the grouped Instrument Search Tool:
+#      explicit With/Without controls, Minimum/Exact mode, compact quantity stepper,
+#      sticky category guide with corrected scroll offsets, and live catalogue summary.
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
 # Current index/search features:
@@ -2172,6 +2175,289 @@ body.index-page .catalogue-card{
   font-size:.76rem;
 }
 
+/* v33 Instrument Search Tool — prototype design integrated functionally. */
+.search-tool-field{
+  border:0;
+  background:transparent;
+  border-radius:0;
+  padding:0;
+}
+
+.instrument-tool-panel{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.instrument-filter-input{
+  width:100%;
+  border-radius:10px;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  padding:7px 9px;
+  color:var(--text);
+  font-size:.78rem;
+  outline:none;
+  margin:0;
+}
+
+.instrument-category-guide{
+  position:sticky;
+  top:0;
+  z-index:18;
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  padding:7px 0 8px;
+  margin:0;
+  background:linear-gradient(#fff 82%,rgba(255,255,255,.94));
+  border-bottom:1px solid rgba(208,213,235,.82);
+}
+
+.instrument-category-guide button{
+  appearance:none;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  color:#536071;
+  border-radius:999px;
+  padding:4px 7px;
+  font:inherit;
+  font-size:.65rem;
+  line-height:1;
+  cursor:pointer;
+}
+
+.instrument-category-guide button:hover,
+.instrument-category-guide button.is-current{
+  background:#eef3fb;
+  color:#2d4d7e;
+  border-color:#cad6e8;
+  font-weight:700;
+}
+
+.instrument-category-list{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+
+.instrument-category-block{
+  border:0;
+  background:transparent;
+  border-radius:0;
+  padding:0;
+  margin:0 0 13px;
+  scroll-margin-top:72px;
+}
+
+.instrument-category-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 6px;
+  padding:0;
+  color:#44506a;
+  font-size:.69rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  line-height:1.1;
+}
+
+.instrument-category-title::after{
+  content:"";
+  flex:1;
+  height:1px;
+  background:var(--border-subtle);
+}
+
+.instrument-rule-list{
+  display:grid;
+  gap:5px;
+}
+
+.instrument-rule-line{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto auto;
+  align-items:center;
+  gap:6px;
+  padding:5px 6px 5px 8px;
+  border:1px solid var(--border-subtle);
+  border-radius:11px;
+  background:#fff;
+  min-height:34px;
+}
+
+.instrument-rule-line:hover{
+  border-color:#b7c1d3;
+  background:#fcfdff;
+}
+
+.instrument-rule-line.is-general{
+  background:#f7f9fc;
+  font-weight:700;
+}
+
+.instrument-rule-line.is-with{
+  border-color:#b9ddcf;
+}
+
+.instrument-rule-line.is-without{
+  border-color:#efc4cc;
+}
+
+.instrument-rule-name{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.77rem;
+  font-weight:650;
+  color:#1f2937;
+}
+
+.instrument-choice{
+  display:inline-flex;
+  border:1px solid var(--border-subtle);
+  border-radius:9px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.instrument-choice-btn{
+  appearance:none;
+  border:0;
+  border-right:1px solid var(--border-subtle);
+  background:#fff;
+  color:#717887;
+  padding:4px 7px;
+  font:inherit;
+  font-size:.65rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-choice-btn:last-child{
+  border-right:0;
+}
+
+.instrument-choice-btn.is-with{
+  background:#eaf7f2;
+  color:#176b58;
+  font-weight:700;
+}
+
+.instrument-choice-btn.is-without{
+  background:#fff0f3;
+  color:#9b2c43;
+  font-weight:700;
+}
+
+.instrument-mode-btn{
+  appearance:none;
+  min-width:54px;
+  text-align:center;
+  padding:4px 6px;
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  color:#687184;
+  background:#fff;
+  font:inherit;
+  font-size:.65rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-qty-control{
+  display:inline-flex;
+  align-items:center;
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.instrument-qty-btn-v33{
+  appearance:none;
+  min-width:23px;
+  border:0;
+  background:#fff;
+  color:#5f6776;
+  padding:4px 5px;
+  font:inherit;
+  font-size:.67rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.instrument-qty-value{
+  min-width:25px;
+  text-align:center;
+  padding:4px 5px;
+  border-left:1px solid var(--border-subtle);
+  border-right:1px solid var(--border-subtle);
+  color:#273247;
+  font-size:.67rem;
+  line-height:1.1;
+  font-weight:700;
+}
+
+.instrument-clear-btn{
+  align-self:flex-start;
+  margin-top:0;
+  padding:5px 9px !important;
+  font-size:.68rem !important;
+  font-weight:650;
+  background:#fff !important;
+  border-color:#d0d5eb !important;
+  color:#4b5563 !important;
+}
+
+.catalogue-heading-block{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.catalogue-active-rules{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+
+.catalogue-active-rules:empty{
+  display:none;
+}
+
+.catalogue-active-rules .active-filter-chip{
+  appearance:none;
+  border:0;
+  border-radius:999px;
+  padding:4px 7px;
+  background:#eaf7f2;
+  color:#176b58;
+  font:inherit;
+  font-size:.66rem;
+  line-height:1.1;
+  cursor:pointer;
+}
+
+.catalogue-active-rules .active-filter-chip.exclude-chip{
+  background:#fff0f3;
+  color:#9b2c43;
+}
+
+@media (max-width:700px){
+  .instrument-rule-line{
+    grid-template-columns:minmax(0,1fr) auto auto;
+  }
+  .instrument-qty-control{
+    grid-column:2 / 4;
+    justify-self:end;
+  }
+}
+
 /* Instrumentation simple-search dropdown */
 .instr-suggest-wrap{
   position:relative;
@@ -3847,7 +4133,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v32-note-links-short-subtitle-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v33-instrument-search-design-2026-07-06">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -3934,17 +4220,11 @@ index_template = """<!doctype html>
               </div>
 
               <div class="filter-field search-tool-field">
-                <label>Search Tool</label>
                 <div class="instrument-tool-panel" id="instrumentToolPanel">
                   <nav class="instrument-category-guide" id="instrumentCategoryGuide" aria-label="Instrument categories"></nav>
-                  <input id="stOtherFilter" class="instrument-filter-input" type="text" placeholder="Filter instruments…" autocomplete="off" />
+                  <input id="stOtherFilter" class="instrument-filter-input" type="text" placeholder="Search instruments…" autocomplete="off" />
                   <div class="instrument-category-list" id="instrumentCategoryList"></div>
-
-                  <div class="instrument-active-block">
-                    <div class="instrument-active-title">Active instrument rules</div>
-                    <div id="stActive"></div>
-                    <button id="stClear" type="button" class="tag" style="cursor:pointer;">Clear instrument rules</button>
-                  </div>
+                  <button id="stClear" type="button" class="tag instrument-clear-btn" style="cursor:pointer;">Clear instrument rules</button>
                 </div>
               </div>
             </div>
@@ -4088,7 +4368,10 @@ index_template = """<!doctype html>
 
     <section class="card catalogue-card">
       <div class="catalogue-head">
-        <h2>Catalogue</h2>
+        <div class="catalogue-heading-block">
+          <h2>Catalogue</h2>
+          <div id="stActive" class="catalogue-active-rules" aria-live="polite"></div>
+        </div>
         <div class="catalogue-sort">
           <label for="sortBy">Sort by</label>
           <select id="sortBy">
@@ -4618,7 +4901,7 @@ index_template = """<!doctype html>
     if(hits.length) openComposerMenu(hits);
   });
 
-  // ============ Search Tool controls — v30 grouped, guided, lazy and delegated
+  // ============ Search Tool controls — v33 aesthetic, grouped, guided, lazy and delegated
   const instrumentationSection = document.getElementById('instrumentationSection');
   const instrumentToolPanel = document.getElementById('instrumentToolPanel');
   const instrumentCategoryList = document.getElementById('instrumentCategoryList');
@@ -4758,34 +5041,26 @@ index_template = """<!doctype html>
     return opt && opt.n ? String(opt.n) : '';
   }
 
-  function cycleStMode(rule){
-    if(!rule.active){
-      rule.active = true;
-      rule.mode = 'include';
+  function setStMode(rule, mode){
+    if(rule.active && rule.mode === mode){
+      rule.active = false;
       return;
     }
-    if(rule.mode === 'include'){
-      rule.mode = 'exclude';
-      return;
-    }
-    rule.active = false;
-    rule.mode = 'include';
+    rule.mode = mode;
+    rule.active = true;
   }
 
   function toggleStCmp(rule){
     rule.cmp = rule.cmp === 'eq' ? 'ge' : 'eq';
-    rule.active = true;
   }
 
   function changeStQty(rule, delta){
-    rule.n = Math.max(0, Math.min(10, (parseInt(rule.n || '1', 10) || 1) + delta));
-    rule.active = true;
+    const current = parseInt(rule.n || '1', 10) || 1;
+    rule.n = Math.max(1, Math.min(10, current + delta));
   }
 
-  function stRulePillText(rule){
-    const sign = rule.active && rule.mode === 'exclude' ? '–' : '+';
-    const cmp = rule.cmp === 'eq' ? '=' : '≥';
-    return `${sign} ${cmp} ${rule.n}`;
+  function stModeLabel(rule){
+    return rule.cmp === 'eq' ? 'Exact' : 'Minimum';
   }
 
   function escapeHtmlText(s){
@@ -4836,22 +5111,25 @@ index_template = """<!doctype html>
     const display = searchToolDisplay(k);
     const code = searchToolCodeLabel(k);
     const title = SEARCH_TOOL_SYNTH_DISPLAY.has(k) ? display : `${display} [${code}]`;
-    const pillClass = rule.active
-      ? (rule.mode === 'exclude' ? 'instrument-rule-pill exclude' : 'instrument-rule-pill include')
-      : 'instrument-rule-pill';
-    const cmp = rule.cmp === 'eq' ? '=' : '≥';
     const count = stCountFor(k);
     const searchText = `${catTitle} ${display} ${code}`.toLowerCase();
+    const generalClass = SEARCH_TOOL_SYNTH_DISPLAY.has(k) ? ' is-general' : '';
+    const stateClass = rule.active ? (rule.mode === 'exclude' ? ' is-without' : ' is-with') : '';
+    const withClass = rule.active && rule.mode === 'include' ? ' is-with' : '';
+    const withoutClass = rule.active && rule.mode === 'exclude' ? ' is-without' : '';
 
     return `
-      <div class="instrument-rule-line" data-st-rule="${escapeHtmlAttr(k)}" data-st-search="${escapeHtmlAttr(searchText)}">
-        <button type="button" class="${pillClass}" data-st-action="cycle" title="inactive → include → exclude → inactive">${stRulePillText(rule)}</button>
-        <div class="instrument-rule-name" title="${escapeHtmlAttr(title)}">${escapeHtmlText(display)}</div>
-        <div class="instrument-rule-controls">
-          <button type="button" class="instrument-operator-btn" data-st-action="cmp" title="Toggle ≥ / =">${cmp}</button>
-          <button type="button" class="instrument-qty-btn" data-st-action="minus" title="Decrease quantity">−</button>
-          <button type="button" class="instrument-qty-btn" data-st-action="plus" title="Increase quantity">+</button>
-          <span class="instrument-rule-count">${escapeHtmlText(count)}</span>
+      <div class="instrument-rule-line${generalClass}${stateClass}" data-st-rule="${escapeHtmlAttr(k)}" data-st-search="${escapeHtmlAttr(searchText)}" title="${escapeHtmlAttr(count ? `${title} — ${count} records` : title)}">
+        <div class="instrument-rule-name">${escapeHtmlText(display)}</div>
+        <div class="instrument-choice" aria-label="Include or exclude ${escapeHtmlAttr(display)}">
+          <button type="button" class="instrument-choice-btn${withClass}" data-st-action="with" aria-pressed="${rule.active && rule.mode === 'include'}">With</button>
+          <button type="button" class="instrument-choice-btn${withoutClass}" data-st-action="without" aria-pressed="${rule.active && rule.mode === 'exclude'}">Without</button>
+        </div>
+        <button type="button" class="instrument-mode-btn" data-st-action="cmp" title="Switch between minimum and exact quantity">${stModeLabel(rule)}</button>
+        <div class="instrument-qty-control" aria-label="Quantity">
+          <button type="button" class="instrument-qty-btn-v33" data-st-action="minus" title="Decrease quantity">−</button>
+          <span class="instrument-qty-value" data-st-qty>${rule.n}</span>
+          <button type="button" class="instrument-qty-btn-v33" data-st-action="plus" title="Increase quantity">+</button>
         </div>
       </div>`;
   }
@@ -4869,8 +5147,30 @@ index_template = """<!doctype html>
       if(!btn) return;
       const id = btn.getAttribute('data-st-jump');
       const block = instrumentCategoryList.querySelector(`[data-st-category="${id}"]`);
-      if(block) block.scrollIntoView({behavior:'smooth', block:'start'});
+      if(block) scrollToInstrumentCategory(block);
     });
+  }
+
+  function scrollToInstrumentCategory(block){
+    if(!block) return;
+    const scroller = instrumentCategoryList.closest('.filters');
+    const guideHeight = instrumentCategoryGuide ? instrumentCategoryGuide.getBoundingClientRect().height : 0;
+    const offset = guideHeight + 10;
+
+    if(scroller){
+      const style = window.getComputedStyle(scroller);
+      const scrollable = ['auto','scroll'].includes(style.overflowY) && scroller.scrollHeight > scroller.clientHeight + 1;
+      if(scrollable){
+        const scrollerRect = scroller.getBoundingClientRect();
+        const blockRect = block.getBoundingClientRect();
+        const target = scroller.scrollTop + blockRect.top - scrollerRect.top - offset;
+        scroller.scrollTo({top:Math.max(0,target), behavior:'smooth'});
+        return;
+      }
+    }
+
+    const target = window.scrollY + block.getBoundingClientRect().top - offset - 8;
+    window.scrollTo({top:Math.max(0,target), behavior:'smooth'});
   }
 
   function observeCurrentInstrumentCategory(){
@@ -4878,6 +5178,7 @@ index_template = """<!doctype html>
     if(!instrumentCategoryGuide || !instrumentCategoryList || !('IntersectionObserver' in window)) return;
 
     const scroller = instrumentCategoryList.closest('.filters');
+    const guideHeight = Math.ceil(instrumentCategoryGuide.getBoundingClientRect().height || 0);
     categoryGuideObserver = new IntersectionObserver(entries => {
       const visible = entries
         .filter(entry => entry.isIntersecting)
@@ -4887,7 +5188,7 @@ index_template = """<!doctype html>
       instrumentCategoryGuide.querySelectorAll('[data-st-jump]').forEach(btn => {
         btn.classList.toggle('is-current', btn.getAttribute('data-st-jump') === id);
       });
-    }, {root:scroller || null, rootMargin:'-8px 0px -70% 0px', threshold:[0,.01]});
+    }, {root:scroller || null, rootMargin:`-${guideHeight + 8}px 0px -68% 0px`, threshold:[0,.01]});
 
     instrumentCategoryList.querySelectorAll('.instrument-category-block').forEach(block => {
       categoryGuideObserver.observe(block);
@@ -4938,20 +5239,26 @@ index_template = """<!doctype html>
   function updateInstrumentRuleRows(k){
     if(!instrumentToolBuilt || !instrumentCategoryList) return;
     const rule = stRuleFor(k);
-    const pillClass = rule.active
-      ? (rule.mode === 'exclude' ? 'instrument-rule-pill exclude' : 'instrument-rule-pill include')
-      : 'instrument-rule-pill';
-    const cmp = rule.cmp === 'eq' ? '=' : '≥';
 
     instrumentCategoryList.querySelectorAll('[data-st-rule]').forEach(line => {
       if(line.getAttribute('data-st-rule') !== k) return;
-      const pill = line.querySelector('[data-st-action="cycle"]');
-      const cmpBtn = line.querySelector('[data-st-action="cmp"]');
-      if(pill){
-        pill.className = pillClass;
-        pill.textContent = stRulePillText(rule);
+      const withBtn = line.querySelector('[data-st-action="with"]');
+      const withoutBtn = line.querySelector('[data-st-action="without"]');
+      const modeBtn = line.querySelector('[data-st-action="cmp"]');
+      const qtyValue = line.querySelector('[data-st-qty]');
+
+      line.classList.toggle('is-with', rule.active && rule.mode === 'include');
+      line.classList.toggle('is-without', rule.active && rule.mode === 'exclude');
+      if(withBtn){
+        withBtn.classList.toggle('is-with', rule.active && rule.mode === 'include');
+        withBtn.setAttribute('aria-pressed', String(rule.active && rule.mode === 'include'));
       }
-      if(cmpBtn) cmpBtn.textContent = cmp;
+      if(withoutBtn){
+        withoutBtn.classList.toggle('is-without', rule.active && rule.mode === 'exclude');
+        withoutBtn.setAttribute('aria-pressed', String(rule.active && rule.mode === 'exclude'));
+      }
+      if(modeBtn) modeBtn.textContent = stModeLabel(rule);
+      if(qtyValue) qtyValue.textContent = String(rule.n);
     });
   }
 
@@ -4996,7 +5303,8 @@ index_template = """<!doctype html>
       const rule = stRuleFor(k);
       const action = btn.getAttribute('data-st-action');
 
-      if(action === 'cycle') cycleStMode(rule);
+      if(action === 'with') setStMode(rule, 'include');
+      else if(action === 'without') setStMode(rule, 'exclude');
       else if(action === 'cmp') toggleStCmp(rule);
       else if(action === 'minus') changeStQty(rule, -1);
       else if(action === 'plus') changeStQty(rule, 1);
@@ -5004,7 +5312,7 @@ index_template = """<!doctype html>
 
       updateInstrumentRuleRows(k);
       renderStRules();
-      applyFilters();
+      if(action === 'with' || action === 'without' || rule.active) applyFilters();
     });
   }
 
@@ -5015,14 +5323,7 @@ index_template = """<!doctype html>
   function renderStRules(){
     stActive.innerHTML = '';
     const rules = activeStRules();
-
-    if(!rules.length){
-      const empty = document.createElement('div');
-      empty.className = 'field-hint';
-      empty.textContent = 'No active instrument rules.';
-      stActive.appendChild(empty);
-      return;
-    }
+    if(!rules.length) return;
 
     rules.forEach(r => {
       const chip = document.createElement('button');
@@ -5030,9 +5331,9 @@ index_template = """<!doctype html>
       chip.className = 'active-filter-chip';
       if(r.mode === 'exclude') chip.classList.add('exclude-chip');
       chip.setAttribute('data-st-clear-key', r.k);
-      const sign = r.mode === 'include' ? '+' : '–';
-      const cmp = r.cmp === 'eq' ? '=' : '≥';
-      chip.textContent = `${sign} ${cmp} ${r.n} ${searchToolDisplay(r.k)} ×`;
+      const relation = r.cmp === 'eq' ? 'exact' : 'minimum';
+      const prefix = r.mode === 'include' ? 'With' : 'Without';
+      chip.textContent = `${prefix} ${searchToolDisplay(r.k)} · ${relation} ${r.n} ×`;
       chip.title = 'Click to remove';
       stActive.appendChild(chip);
     });
@@ -6352,7 +6653,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v32-note-links-short-subtitle-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v33-instrument-search-design-2026-07-06">
 </head>
 <body>
 @@HEADER@@
