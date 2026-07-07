@@ -9,6 +9,8 @@
 #      sticky category guide with corrected scroll offsets, and live catalogue summary.
 # v34: hide Tenorete from all visible Search Tool rows while keeping it
 #      inside broad Generic/Woodwind/Brass, Fagotto and Trombone searches.
+# v35: show Min. and Exact as an explicit segmented choice matching the
+#      visual language of the With/Without control.
 # UNION version (composer dropdown + smart collections + Search Tool + RISM chronology + RISM drawer)
 #
 # Current index/search features:
@@ -2355,19 +2357,19 @@ body.index-page .catalogue-card{
   font-weight:700;
 }
 
-.instrument-mode-btn{
-  appearance:none;
-  min-width:54px;
+.instrument-comparison{
+  min-width:76px;
+}
+
+.instrument-comparison .instrument-choice-btn{
+  min-width:35px;
   text-align:center;
-  padding:4px 6px;
-  border:1px solid var(--border-subtle);
-  border-radius:8px;
-  color:#687184;
-  background:#fff;
-  font:inherit;
-  font-size:.65rem;
-  line-height:1.1;
-  cursor:pointer;
+}
+
+.instrument-choice-btn.is-comparison{
+  background:#eef3fb;
+  color:#2d4d7e;
+  font-weight:700;
 }
 
 .instrument-qty-control{
@@ -4135,7 +4137,7 @@ index_template = """<!doctype html>
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v34-hidden-tenorete-trombone-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v35-segmented-min-exact-2026-07-06">
 </head>
 <body class="index-page">
 @@HEADER@@
@@ -5054,17 +5056,13 @@ index_template = """<!doctype html>
     rule.active = true;
   }
 
-  function toggleStCmp(rule){
-    rule.cmp = rule.cmp === 'eq' ? 'ge' : 'eq';
+  function setStCmp(rule, cmp){
+    rule.cmp = cmp === 'eq' ? 'eq' : 'ge';
   }
 
   function changeStQty(rule, delta){
     const current = parseInt(rule.n || '1', 10) || 1;
     rule.n = Math.max(1, Math.min(10, current + delta));
-  }
-
-  function stModeLabel(rule){
-    return rule.cmp === 'eq' ? 'Exact' : 'Minimum';
   }
 
   function escapeHtmlText(s){
@@ -5121,6 +5119,8 @@ index_template = """<!doctype html>
     const stateClass = rule.active ? (rule.mode === 'exclude' ? ' is-without' : ' is-with') : '';
     const withClass = rule.active && rule.mode === 'include' ? ' is-with' : '';
     const withoutClass = rule.active && rule.mode === 'exclude' ? ' is-without' : '';
+    const minClass = rule.cmp === 'ge' ? ' is-comparison' : '';
+    const exactClass = rule.cmp === 'eq' ? ' is-comparison' : '';
 
     return `
       <div class="instrument-rule-line${generalClass}${stateClass}" data-st-rule="${escapeHtmlAttr(k)}" data-st-search="${escapeHtmlAttr(searchText)}" title="${escapeHtmlAttr(count ? `${title} — ${count} records` : title)}">
@@ -5129,7 +5129,10 @@ index_template = """<!doctype html>
           <button type="button" class="instrument-choice-btn${withClass}" data-st-action="with" aria-pressed="${rule.active && rule.mode === 'include'}">With</button>
           <button type="button" class="instrument-choice-btn${withoutClass}" data-st-action="without" aria-pressed="${rule.active && rule.mode === 'exclude'}">Without</button>
         </div>
-        <button type="button" class="instrument-mode-btn" data-st-action="cmp" title="Switch between minimum and exact quantity">${stModeLabel(rule)}</button>
+        <div class="instrument-choice instrument-comparison" aria-label="Minimum or exact quantity">
+          <button type="button" class="instrument-choice-btn${minClass}" data-st-action="cmp-ge" aria-pressed="${rule.cmp === 'ge'}" title="At least this quantity">Min.</button>
+          <button type="button" class="instrument-choice-btn${exactClass}" data-st-action="cmp-eq" aria-pressed="${rule.cmp === 'eq'}" title="Exactly this quantity">Exact</button>
+        </div>
         <div class="instrument-qty-control" aria-label="Quantity">
           <button type="button" class="instrument-qty-btn-v33" data-st-action="minus" title="Decrease quantity">−</button>
           <span class="instrument-qty-value" data-st-qty>${rule.n}</span>
@@ -5248,7 +5251,8 @@ index_template = """<!doctype html>
       if(line.getAttribute('data-st-rule') !== k) return;
       const withBtn = line.querySelector('[data-st-action="with"]');
       const withoutBtn = line.querySelector('[data-st-action="without"]');
-      const modeBtn = line.querySelector('[data-st-action="cmp"]');
+      const minBtn = line.querySelector('[data-st-action="cmp-ge"]');
+      const exactBtn = line.querySelector('[data-st-action="cmp-eq"]');
       const qtyValue = line.querySelector('[data-st-qty]');
 
       line.classList.toggle('is-with', rule.active && rule.mode === 'include');
@@ -5261,7 +5265,14 @@ index_template = """<!doctype html>
         withoutBtn.classList.toggle('is-without', rule.active && rule.mode === 'exclude');
         withoutBtn.setAttribute('aria-pressed', String(rule.active && rule.mode === 'exclude'));
       }
-      if(modeBtn) modeBtn.textContent = stModeLabel(rule);
+      if(minBtn){
+        minBtn.classList.toggle('is-comparison', rule.cmp === 'ge');
+        minBtn.setAttribute('aria-pressed', String(rule.cmp === 'ge'));
+      }
+      if(exactBtn){
+        exactBtn.classList.toggle('is-comparison', rule.cmp === 'eq');
+        exactBtn.setAttribute('aria-pressed', String(rule.cmp === 'eq'));
+      }
       if(qtyValue) qtyValue.textContent = String(rule.n);
     });
   }
@@ -5309,7 +5320,8 @@ index_template = """<!doctype html>
 
       if(action === 'with') setStMode(rule, 'include');
       else if(action === 'without') setStMode(rule, 'exclude');
-      else if(action === 'cmp') toggleStCmp(rule);
+      else if(action === 'cmp-ge') setStCmp(rule, 'ge');
+      else if(action === 'cmp-eq') setStCmp(rule, 'eq');
       else if(action === 'minus') changeStQty(rule, -1);
       else if(action === 'plus') changeStQty(rule, 1);
       else return;
@@ -6657,7 +6669,7 @@ detail_template = """<!doctype html>
   <meta charset="utf-8">
   <title>@@TITLE_FULL@@</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v34-hidden-tenorete-trombone-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v35-segmented-min-exact-2026-07-06">
 </head>
 <body>
 @@HEADER@@
