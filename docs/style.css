@@ -1267,19 +1267,19 @@ body.index-page .catalogue-card{
   font-weight:700;
 }
 
-.instrument-mode-btn{
-  appearance:none;
-  min-width:54px;
+.instrument-comparison{
+  min-width:76px;
+}
+
+.instrument-comparison .instrument-choice-btn{
+  min-width:35px;
   text-align:center;
-  padding:4px 6px;
-  border:1px solid var(--border-subtle);
-  border-radius:8px;
-  color:#687184;
-  background:#fff;
-  font:inherit;
-  font-size:.65rem;
-  line-height:1.1;
-  cursor:pointer;
+}
+
+.instrument-choice-btn.is-comparison{
+  background:#eef3fb;
+  color:#2d4d7e;
+  font-weight:700;
 }
 
 .instrument-qty-control{

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>ZinkNET — Interactive catalogue</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="style.css?v=detail-v34-hidden-tenorete-trombone-2026-07-06">
+  <link rel="stylesheet" href="style.css?v=detail-v35-segmented-min-exact-2026-07-06">
 </head>
 <body class="index-page">
 
@@ -136084,7 +136084,7 @@
   const stClear = document.getElementById('stClear');
   const stActive = document.getElementById('stActive');
 
-  const SEARCH_TOOL_INSTRS = [{"k": "a", "d": "Alto instrument", "n": 61}, {"k": "A", "d": "Alto voice", "n": 2104}, {"k": "arp", "d": "Arpa", "n": 39}, {"k": "b", "d": "Bass instrument", "n": 127}, {"k": "B", "d": "Bass voice", "n": 2159}, {"k": "Bariton", "d": "Bariton voice", "n": 1}, {"k": "bassetto", "d": "Bassetto", "n": 1}, {"k": "bc", "d": "Basso continuo", "n": 1055}, {"k": "bombarde", "d": "Bombarde", "n": 78}, {"k": "bugle", "d": "Bugle", "n": 1}, {"k": "cb", "d": "Contrabasso", "n": 1}, {"k": "cemb", "d": "Cembalo", "n": 43}, {"k": "cetra", "d": "Cetra", "n": 14}, {"k": "ciaramella", "d": "Ciaramella", "n": 5}, {"k": "cimb", "d": "Cimbalum", "n": 1}, {"k": "cl", "d": "Clarinet", "n": 5}, {"k": "clno", "d": "Clarino", "n": 2}, {"k": "cnto", "d": "Cornetto", "n": 2724}, {"k": "cnto muto", "d": "Cornetto muto", "n": 51}, {"k": "colascione", "d": "Colascione", "n": 5}, {"k": "cor", "d": "Cor", "n": 13}, {"k": "cor da caccia", "d": "Cor da Caccia", "n": 3}, {"k": "cor di bassetto", "d": "Cor di Bassetto", "n": 2}, {"k": "cornettino", "d": "Cornettino", "n": 274}, {"k": "crummhorn", "d": "Crummhorn", "n": 7}, {"k": "dolzano", "d": "Dolzano", "n": 1}, {"k": "fag", "d": "Fagotto", "n": 1257}, {"k": "fag.picc", "d": "Fagotto piccolo", "n": 2}, {"k": "fiffaro", "d": "Fiffaro", "n": 16}, {"k": "fl", "d": "Flauto", "n": 150}, {"k": "gong", "d": "Gong", "n": 1}, {"k": "grancassa", "d": "Gran cassa", "n": 1}, {"k": "lira", "d": "Lira", "n": 5}, {"k": "lirone", "d": "Lirone", "n": 12}, {"k": "lituus", "d": "Lituus", "n": 2}, {"k": "lute", "d": "Lute", "n": 110}, {"k": "mandoline", "d": "Mandoline", "n": 3}, {"k": "ob", "d": "Oboe", "n": 89}, {"k": "org", "d": "Organo", "n": 1628}, {"k": "pf", "d": "Pianoforte", "n": 1}, {"k": "piatti", "d": "Piatti", "n": 1}, {"k": "pipe and tabor", "d": "Pipe and Tabor", "n": 1}, {"k": "positif", "d": "Positive organ", "n": 55}, {"k": "recorder", "d": "Recorder", "n": 2}, {"k": "regal", "d": "Regal", "n": 10}, {"k": "ribecchino", "d": "Ribecchino", "n": 1}, {"k": "s", "d": "Soprano instrument", "n": 70}, {"k": "S", "d": "Soprano voice", "n": 2260}, {"k": "salterio", "d": "Salterio", "n": 3}, {"k": "sax", "d": "Saxophone", "n": 1}, {"k": "saxhorn", "d": "Saxhorn", "n": 1}, {"k": "schryari", "d": "Schryari", "n": 3}, {"k": "serpent", "d": "Serpent", "n": 2}, {"k": "sordone", "d": "Sordone", "n": 1}, {"k": "sordun", "d": "Sordun", "n": 1}, {"k": "spinetta", "d": "Spinetta", "n": 5}, {"k": "strings", "d": "Strings", "n": 4}, {"k": "t", "d": "Tenor instrument", "n": 64}, {"k": "T", "d": "Tenor voice", "n": 2185}, {"k": "tab", "d": "Tablature", "n": 1}, {"k": "tam-tam", "d": "Tam-tam", "n": 1}, {"k": "tamb", "d": "Tamburro", "n": 2}, {"k": "tb", "d": "Tuba", "n": 3}, {"k": "tenorete", "d": "Tenorete", "n": 1}, {"k": "theorbe", "d": "Theorbe", "n": 184}, {"k": "timp", "d": "Timpanum", "n": 256}, {"k": "tr", "d": "Trumpet", "n": 533}, {"k": "trb", "d": "Trombone", "n": 2322}, {"k": "triangolo", "d": "Triangolo", "n": 1}, {"k": "violetta", "d": "Violetta", "n": 102}, {"k": "vl", "d": "Violino", "n": 2261}, {"k": "vla", "d": "Viola", "n": 963}, {"k": "vla da gamba", "d": "Viola da Gamba", "n": 74}, {"k": "vlc", "d": "Violoncello", "n": 696}, {"k": "vlne", "d": "Violone", "n": 1370}];
+  const SEARCH_TOOL_INSTRS = [{"k": "A", "d": "Alto voice", "n": 2104}, {"k": "a", "d": "Alto instrument", "n": 61}, {"k": "arp", "d": "Arpa", "n": 39}, {"k": "b", "d": "Bass instrument", "n": 127}, {"k": "B", "d": "Bass voice", "n": 2159}, {"k": "Bariton", "d": "Bariton voice", "n": 1}, {"k": "bassetto", "d": "Bassetto", "n": 1}, {"k": "bc", "d": "Basso continuo", "n": 1055}, {"k": "bombarde", "d": "Bombarde", "n": 78}, {"k": "bugle", "d": "Bugle", "n": 1}, {"k": "cb", "d": "Contrabasso", "n": 1}, {"k": "cemb", "d": "Cembalo", "n": 43}, {"k": "cetra", "d": "Cetra", "n": 14}, {"k": "ciaramella", "d": "Ciaramella", "n": 5}, {"k": "cimb", "d": "Cimbalum", "n": 1}, {"k": "cl", "d": "Clarinet", "n": 5}, {"k": "clno", "d": "Clarino", "n": 2}, {"k": "cnto", "d": "Cornetto", "n": 2724}, {"k": "cnto muto", "d": "Cornetto muto", "n": 51}, {"k": "colascione", "d": "Colascione", "n": 5}, {"k": "cor", "d": "Cor", "n": 13}, {"k": "cor da caccia", "d": "Cor da Caccia", "n": 3}, {"k": "cor di bassetto", "d": "Cor di Bassetto", "n": 2}, {"k": "cornettino", "d": "Cornettino", "n": 274}, {"k": "crummhorn", "d": "Crummhorn", "n": 7}, {"k": "dolzano", "d": "Dolzano", "n": 1}, {"k": "fag", "d": "Fagotto", "n": 1257}, {"k": "fag.picc", "d": "Fagotto piccolo", "n": 2}, {"k": "fiffaro", "d": "Fiffaro", "n": 16}, {"k": "fl", "d": "Flauto", "n": 150}, {"k": "gong", "d": "Gong", "n": 1}, {"k": "grancassa", "d": "Gran cassa", "n": 1}, {"k": "lira", "d": "Lira", "n": 5}, {"k": "lirone", "d": "Lirone", "n": 12}, {"k": "lituus", "d": "Lituus", "n": 2}, {"k": "lute", "d": "Lute", "n": 110}, {"k": "mandoline", "d": "Mandoline", "n": 3}, {"k": "ob", "d": "Oboe", "n": 89}, {"k": "org", "d": "Organo", "n": 1628}, {"k": "pf", "d": "Pianoforte", "n": 1}, {"k": "piatti", "d": "Piatti", "n": 1}, {"k": "pipe and tabor", "d": "Pipe and Tabor", "n": 1}, {"k": "positif", "d": "Positive organ", "n": 55}, {"k": "recorder", "d": "Recorder", "n": 2}, {"k": "regal", "d": "Regal", "n": 10}, {"k": "ribecchino", "d": "Ribecchino", "n": 1}, {"k": "s", "d": "Soprano instrument", "n": 70}, {"k": "S", "d": "Soprano voice", "n": 2260}, {"k": "salterio", "d": "Salterio", "n": 3}, {"k": "sax", "d": "Saxophone", "n": 1}, {"k": "saxhorn", "d": "Saxhorn", "n": 1}, {"k": "schryari", "d": "Schryari", "n": 3}, {"k": "serpent", "d": "Serpent", "n": 2}, {"k": "sordone", "d": "Sordone", "n": 1}, {"k": "sordun", "d": "Sordun", "n": 1}, {"k": "spinetta", "d": "Spinetta", "n": 5}, {"k": "strings", "d": "Strings", "n": 4}, {"k": "t", "d": "Tenor instrument", "n": 64}, {"k": "T", "d": "Tenor voice", "n": 2185}, {"k": "tab", "d": "Tablature", "n": 1}, {"k": "tam-tam", "d": "Tam-tam", "n": 1}, {"k": "tamb", "d": "Tamburro", "n": 2}, {"k": "tb", "d": "Tuba", "n": 3}, {"k": "tenorete", "d": "Tenorete", "n": 1}, {"k": "theorbe", "d": "Theorbe", "n": 184}, {"k": "timp", "d": "Timpanum", "n": 256}, {"k": "tr", "d": "Trumpet", "n": 533}, {"k": "trb", "d": "Trombone", "n": 2322}, {"k": "triangolo", "d": "Triangolo", "n": 1}, {"k": "violetta", "d": "Violetta", "n": 102}, {"k": "vl", "d": "Violino", "n": 2261}, {"k": "vla", "d": "Viola", "n": 963}, {"k": "vla da gamba", "d": "Viola da Gamba", "n": 74}, {"k": "vlc", "d": "Violoncello", "n": 696}, {"k": "vlne", "d": "Violone", "n": 1370}];
   const SEARCH_TOOL_DISPLAY = new Map(SEARCH_TOOL_INSTRS.map(o => [o.k, o.d || o.k]));
   const stRules = [];
   let instrumentToolBuilt = false;
@@ -136226,17 +136226,13 @@
     rule.active = true;
   }
 
-  function toggleStCmp(rule){
-    rule.cmp = rule.cmp === 'eq' ? 'ge' : 'eq';
+  function setStCmp(rule, cmp){
+    rule.cmp = cmp === 'eq' ? 'eq' : 'ge';
   }
 
   function changeStQty(rule, delta){
     const current = parseInt(rule.n || '1', 10) || 1;
     rule.n = Math.max(1, Math.min(10, current + delta));
-  }
-
-  function stModeLabel(rule){
-    return rule.cmp === 'eq' ? 'Exact' : 'Minimum';
   }
 
   function escapeHtmlText(s){
@@ -136293,6 +136289,8 @@
     const stateClass = rule.active ? (rule.mode === 'exclude' ? ' is-without' : ' is-with') : '';
     const withClass = rule.active && rule.mode === 'include' ? ' is-with' : '';
     const withoutClass = rule.active && rule.mode === 'exclude' ? ' is-without' : '';
+    const minClass = rule.cmp === 'ge' ? ' is-comparison' : '';
+    const exactClass = rule.cmp === 'eq' ? ' is-comparison' : '';
 
     return `
       <div class="instrument-rule-line${generalClass}${stateClass}" data-st-rule="${escapeHtmlAttr(k)}" data-st-search="${escapeHtmlAttr(searchText)}" title="${escapeHtmlAttr(count ? `${title} — ${count} records` : title)}">
@@ -136301,7 +136299,10 @@
           <button type="button" class="instrument-choice-btn${withClass}" data-st-action="with" aria-pressed="${rule.active && rule.mode === 'include'}">With</button>
           <button type="button" class="instrument-choice-btn${withoutClass}" data-st-action="without" aria-pressed="${rule.active && rule.mode === 'exclude'}">Without</button>
         </div>
-        <button type="button" class="instrument-mode-btn" data-st-action="cmp" title="Switch between minimum and exact quantity">${stModeLabel(rule)}</button>
+        <div class="instrument-choice instrument-comparison" aria-label="Minimum or exact quantity">
+          <button type="button" class="instrument-choice-btn${minClass}" data-st-action="cmp-ge" aria-pressed="${rule.cmp === 'ge'}" title="At least this quantity">Min.</button>
+          <button type="button" class="instrument-choice-btn${exactClass}" data-st-action="cmp-eq" aria-pressed="${rule.cmp === 'eq'}" title="Exactly this quantity">Exact</button>
+        </div>
         <div class="instrument-qty-control" aria-label="Quantity">
           <button type="button" class="instrument-qty-btn-v33" data-st-action="minus" title="Decrease quantity">−</button>
           <span class="instrument-qty-value" data-st-qty>${rule.n}</span>
@@ -136420,7 +136421,8 @@
       if(line.getAttribute('data-st-rule') !== k) return;
       const withBtn = line.querySelector('[data-st-action="with"]');
       const withoutBtn = line.querySelector('[data-st-action="without"]');
-      const modeBtn = line.querySelector('[data-st-action="cmp"]');
+      const minBtn = line.querySelector('[data-st-action="cmp-ge"]');
+      const exactBtn = line.querySelector('[data-st-action="cmp-eq"]');
       const qtyValue = line.querySelector('[data-st-qty]');
 
       line.classList.toggle('is-with', rule.active && rule.mode === 'include');
@@ -136433,7 +136435,14 @@
         withoutBtn.classList.toggle('is-without', rule.active && rule.mode === 'exclude');
         withoutBtn.setAttribute('aria-pressed', String(rule.active && rule.mode === 'exclude'));
       }
-      if(modeBtn) modeBtn.textContent = stModeLabel(rule);
+      if(minBtn){
+        minBtn.classList.toggle('is-comparison', rule.cmp === 'ge');
+        minBtn.setAttribute('aria-pressed', String(rule.cmp === 'ge'));
+      }
+      if(exactBtn){
+        exactBtn.classList.toggle('is-comparison', rule.cmp === 'eq');
+        exactBtn.setAttribute('aria-pressed', String(rule.cmp === 'eq'));
+      }
       if(qtyValue) qtyValue.textContent = String(rule.n);
     });
   }
@@ -136481,7 +136490,8 @@
 
       if(action === 'with') setStMode(rule, 'include');
       else if(action === 'without') setStMode(rule, 'exclude');
-      else if(action === 'cmp') toggleStCmp(rule);
+      else if(action === 'cmp-ge') setStCmp(rule, 'ge');
+      else if(action === 'cmp-eq') setStCmp(rule, 'eq');
       else if(action === 'minus') changeStQty(rule, -1);
       else if(action === 'plus') changeStQty(rule, 1);
       else return;
